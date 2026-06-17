@@ -1,0 +1,18 @@
+﻿{
+  "name": "abm-carga-diaria-api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "API backend para ABMCargaDiaria. Centraliza reglas, ASA9, CSV bancario y servicios para el cliente desktop.",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {}
+}

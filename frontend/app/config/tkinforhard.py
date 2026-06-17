@@ -4,8 +4,8 @@ The preferred path is installing TkInforHard in the project virtual environment:
 
     python -m pip install -r requirements.txt
 
-For local development, a sibling ../TkInforHard checkout is also detected. This
-keeps the project movable without hardcoding an absolute path.
+For local development, a sibling ../../TkInforHard checkout is also detected.
+This keeps the project movable without hardcoding an absolute path.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def _add_local_tkinforhard_path() -> None:
     candidates = []
     if env_path:
         candidates.append(Path(env_path))
-    candidates.append(Path(__file__).resolve().parents[3] / "TkInforHard")
+    candidates.append(Path(__file__).resolve().parents[4] / "TkInforHard")
 
     for candidate in candidates:
         package_dir = candidate / "TkInforHard"
@@ -33,15 +33,17 @@ _add_local_tkinforhard_path()
 
 try:
     from TkInforHard import IHApplication, IHConfig
-    from TkInforHard.layout import IHGrid, IHPage, IHStack
+    from TkInforHard.layout import IHGrid, IHPage, IHRenderHost, IHStack
     from TkInforHard.widgets import (
         IHAlert,
+        IHButton,
         IHBreadcrumb,
-        IHEmptyState,
-        IHFilterBar,
+        IHCombobox,
+        IHDateInput,
+        IHDrawerMenu,
+        IHInput,
         IHMetricCard,
         IHSectionHeader,
-        IHSidebar,
         IHTable,
         IHTopbar,
     )
@@ -53,14 +55,17 @@ except Exception as exc:  # pragma: no cover - depends on local environment
     IHConfig = None
     IHGrid = None
     IHPage = None
+    IHRenderHost = None
     IHStack = None
     IHAlert = None
+    IHButton = None
     IHBreadcrumb = None
-    IHEmptyState = None
-    IHFilterBar = None
+    IHCombobox = None
+    IHDateInput = None
+    IHDrawerMenu = None
+    IHInput = None
     IHMetricCard = None
     IHSectionHeader = None
-    IHSidebar = None
     IHTable = None
     IHTopbar = None
     TKINFORHARD_AVAILABLE = False

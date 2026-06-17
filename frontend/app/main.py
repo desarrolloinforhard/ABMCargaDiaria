@@ -11,6 +11,13 @@ if __package__ in (None, ""):
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
+from app.infrastructure.logging import ProjectLogger, get_logger, install_exception_hooks
+
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+ProjectLogger.configure(log_dir=LOG_DIR, log_file="abm_carga_diaria_frontend.log")
+install_exception_hooks()
+logger = get_logger("main")
+
 from app.config.settings import settings
 from app.config.tkinforhard import IHApplication, IHConfig, TKINFORHARD_AVAILABLE
 from app.ui.main_window import MainWindow
@@ -19,6 +26,7 @@ from app.ui.main_window import MainWindow
 def create_app():
     """Create the root window without starting the Tk event loop."""
 
+    logger.info("Creando aplicacion frontend. TkInforHard disponible=%s", TKINFORHARD_AVAILABLE)
     if TKINFORHARD_AVAILABLE:
         root = IHApplication(
             IHConfig(
@@ -35,6 +43,7 @@ def create_app():
 
 
 def main() -> None:
+    logger.info("Iniciando ABMCargaDiaria frontend")
     app = create_app()
     app.mainloop()
 
