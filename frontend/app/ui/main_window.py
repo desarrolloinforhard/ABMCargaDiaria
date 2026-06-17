@@ -283,7 +283,11 @@ class CajaDiariaView(ttk.Frame):
             ("Banco", self._money(metricas["banco"]), f"Pendientes: {metricas['pendientes']}"),
         ]
         for index, (title, value, delta) in enumerate(metric_data):
-            metrics.add(IHMetricCard(metrics, title=title, value=value, delta=delta, variant="outlined"), index)
+            card = IHMetricCard(metrics, title=title, value=value, delta=delta, variant="outlined")
+            card.canvas.configure(height=1)
+            card.content.bind("<Configure>", lambda e, c=card: self._ajustar_altura_card(e, c), add="+")
+            card.bind("<Map>", lambda e, c=card: self._ajustar_altura_card_map(c), add="+")
+            metrics.add(card, index)
 
     def _render_table(self) -> None:
         self.table.load(movimientos_a_filas(self.movimientos_modelo))
@@ -297,6 +301,19 @@ class CajaDiariaView(ttk.Frame):
 
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
+
+    def _ajustar_altura_card(self, event, card) -> None:
+        if event.height < 4:
+            return
+        needed = event.height + card.padding * 2 + 4
+        if card.canvas.winfo_reqheight() != needed:
+            card.canvas.configure(height=needed)
+
+    def _ajustar_altura_card_map(self, card) -> None:
+        card.update_idletasks()
+        h = card.content.winfo_reqheight()
+        if h > 0:
+            card.canvas.configure(height=h + card.padding * 2 + 4)
 
     def _money(self, value: str | int | float | None) -> str:
         try:
