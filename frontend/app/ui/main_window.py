@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import tkinter as tk
 from datetime import date
-from decimal import Decimal
 from tkinter import ttk
 
 from app.config.settings import settings
@@ -29,69 +28,12 @@ from app.config.tkinforhard import (
     TKINFORHARD_IMPORT_ERROR,
 )
 from app.models import EstadoMovimiento, Movimiento, OrigenMovimiento, TipoMovimiento
+from app.ui.mocks import MOVIMIENTOS_MOCK
 from app.services.api_client import ApiClient, ApiClientError
 
 logger = get_logger("ui.main_window")
 from app.ui.utils.movimiento_adapter import calcular_metricas, movimientos_a_filas
 
-
-_MOVIMIENTOS_PRUEBA: tuple[Movimiento, ...] = (
-    Movimiento(
-        fecha=date.today(),
-        tipo=TipoMovimiento.INGRESO,
-        estado=EstadoMovimiento.CONFIRMADO,
-        origen=OrigenMovimiento.MANUAL,
-        monto=Decimal("150000.00"),
-        descripcion="Cobro cliente Empresa SA",
-        id=1,
-    ),
-    Movimiento(
-        fecha=date.today(),
-        tipo=TipoMovimiento.INGRESO,
-        estado=EstadoMovimiento.PENDIENTE,
-        origen=OrigenMovimiento.MANUAL,
-        monto=Decimal("75000.00"),
-        descripcion="Cobro pendiente confirmacion",
-        id=2,
-    ),
-    Movimiento(
-        fecha=date.today(),
-        tipo=TipoMovimiento.EGRESO,
-        estado=EstadoMovimiento.CONFIRMADO,
-        origen=OrigenMovimiento.MANUAL,
-        monto=Decimal("32000.00"),
-        descripcion="Pago proveedor materiales",
-        id=3,
-    ),
-    Movimiento(
-        fecha=date.today(),
-        tipo=TipoMovimiento.BANCO,
-        estado=EstadoMovimiento.CONCILIADO,
-        origen=OrigenMovimiento.CSV_BANCO,
-        monto=Decimal("95000.00"),
-        descripcion="Transferencia bancaria recibida",
-        id=4,
-    ),
-    Movimiento(
-        fecha=date.today(),
-        tipo=TipoMovimiento.ADELANTO,
-        estado=EstadoMovimiento.CONFIRMADO,
-        origen=OrigenMovimiento.MANUAL,
-        monto=Decimal("15000.00"),
-        descripcion="Adelanto empleado Juan Perez",
-        id=5,
-        empleado_id=101,
-    ),
-    Movimiento(
-        fecha=date.today(),
-        tipo=TipoMovimiento.INGRESO,
-        estado=EstadoMovimiento.ANULADO,
-        origen=OrigenMovimiento.MANUAL,
-        monto=Decimal("50000.00"),
-        descripcion="Ingreso anulado por error",
-        id=6,
-    ),
-)
 
 
 class MainWindow:
@@ -205,7 +147,7 @@ class CajaDiariaView(ttk.Frame):
         super().__init__(master)
         self.api_client = api_client
         self.on_reload = on_reload
-        self.movimientos_modelo: list[Movimiento] = list(_MOVIMIENTOS_PRUEBA)
+        self.movimientos_modelo: list[Movimiento] = list(MOVIMIENTOS_MOCK)
         self.status_message = "Preparando vista..."
         self._build_widgets()
 
@@ -388,5 +330,6 @@ class PlaceholderView(ttk.Frame):
             message="Este modulo se implementara en una fase posterior.",
             variant="warning",
         ).pack(fill="x")
+
 
 

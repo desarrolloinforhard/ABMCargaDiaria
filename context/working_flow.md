@@ -32,3 +32,10 @@ ABMCargaDiaria se trabaja contrato primero:
 - Backend no importa componentes TkInforHard.
 - Los contratos JSON son la fuente comun entre frontend y backend.
 - No usar strings sueltos para tipos y estados cuando exista enum/modelo equivalente.
+
+## Uso de mocks
+
+- Los mocks deben vivir en carpetas `mocks/`, nunca hardcodeados dentro de una vista o service final.
+- Frontend usa `frontend/app/ui/mocks/` para prototipar pantallas.
+- Backend usa `backend/src/mocks/` para endpoints temporales y contratos.
+- Si un mock empieza a representar una regla real, esa regla debe moverse a model/service y testearse ahi.

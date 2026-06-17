@@ -67,3 +67,10 @@
 - Integrado logging en arranque de app, cliente API y vista principal.
 - Agregados hooks de excepciones no capturadas con traceback.
 - Ignorados logs locales del frontend.
+
+## v0.0.10 - 2026-06-17
+
+- Extraidos mocks de movimientos fuera de `main_window.py`.
+- Agregados mocks frontend para movimientos, facturas y remitos.
+- Agregados mocks backend para movimientos y ventas futuras.
+- Documentada estrategia de mock data.
