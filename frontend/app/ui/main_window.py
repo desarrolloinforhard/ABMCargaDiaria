@@ -10,9 +10,10 @@ from app.config.settings import settings
 from app.infrastructure.logging import get_logger
 from app.config.tkinforhard import (
     IHAlert,
-    IHButton,
     IHBreadcrumb,
+    IHButton,
     IHCombobox,
+    IHSectionHeader,
     IHDateInput,
     IHDrawerMenu,
     IHGrid,
@@ -20,7 +21,6 @@ from app.config.tkinforhard import (
     IHMetricCard,
     IHPage,
     IHRenderHost,
-    IHSectionHeader,
     IHTable,
     IHTopbar,
     TKINFORHARD_AVAILABLE,
@@ -76,6 +76,8 @@ class MainWindow:
             on_toggle_menu=self.drawer.toggle,
         )
         self.topbar.grid(row=0, column=0, sticky="ew")
+        self._topbar_subtitle_var = tk.StringVar()
+        ttk.Label(self.topbar, textvariable=self._topbar_subtitle_var, style="IH.TopbarTitle.TLabel").pack(side="right", padx=(0, 16))
 
         self.render_host = IHRenderHost(
             shell,
@@ -88,11 +90,23 @@ class MainWindow:
             prepare_timeout_ms=10000,
         )
         self.render_host.grid(row=1, column=0, sticky="nsew")
+        self.root.bind("<Button-1>", self._on_root_click, add="+")
+
+    def _on_root_click(self, event) -> None:
+        if not self.drawer.is_open:
+            return
+        dx = self.drawer.winfo_rootx()
+        dy = self.drawer.winfo_rooty()
+        dw = self.drawer.winfo_width()
+        dh = self.drawer.winfo_height()
+        if not (dx <= event.x_root < dx + dw and dy <= event.y_root < dy + dh):
+            self.drawer.close()
 
     def _show_caja_diaria(self) -> None:
         self.current_view_key = "caja_diaria"
         logger.info("RenderHost show view=caja_diaria")
         self.topbar.set_title("Caja Diaria")
+        self._topbar_subtitle_var.set("Carga manual contra API backend y resumen calculado antes de mostrar la vista.")
         self.render_host.show(
             lambda master: CajaDiariaView(master, self.api_client, self._reload_current_view),
             cache_key="caja_diaria",
@@ -104,6 +118,7 @@ class MainWindow:
         self.current_view_key = key
         logger.info("RenderHost show placeholder title=%s", title)
         self.topbar.set_title(title)
+        self._topbar_subtitle_var.set("")
         self.render_host.show(lambda master: PlaceholderView(master, title), cache_key=key)
         self._close_drawer_if_open()
 
@@ -178,13 +193,6 @@ class CajaDiariaView(ttk.Frame):
         page = IHPage(self, padding=24)
         page.grid(row=0, column=0, sticky="nsew")
         page.columnconfigure(0, weight=1)
-
-        IHBreadcrumb(page, items=("Inicio", "Caja Diaria")).pack(anchor="w", pady=(0, 12))
-        IHSectionHeader(
-            page,
-            title="Caja Diaria",
-            subtitle="Carga manual contra API backend y resumen calculado antes de mostrar la vista.",
-        ).pack(fill="x", pady=(0, 16))
 
         self.metrics_host = ttk.Frame(page)
         self.metrics_host.pack(fill="x", pady=(0, 18))
