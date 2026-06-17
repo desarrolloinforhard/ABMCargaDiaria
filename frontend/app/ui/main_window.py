@@ -21,7 +21,6 @@ from app.config.tkinforhard import (
     IHPage,
     IHRenderHost,
     IHSectionHeader,
-    IHStack,
     IHTable,
     IHTopbar,
     TKINFORHARD_AVAILABLE,
@@ -32,7 +31,7 @@ from app.ui.mocks import MOVIMIENTOS_MOCK
 from app.services.api_client import ApiClient, ApiClientError
 
 logger = get_logger("ui.main_window")
-from app.ui.utils.movimiento_adapter import calcular_metricas, movimientos_a_filas
+from app.ui.utils.movimiento_adapter import calcular_metricas, movimiento_desde_api, movimientos_a_filas
 
 
 
@@ -64,19 +63,19 @@ class MainWindow:
 
         self.drawer = IHDrawerMenu(shell, title=settings.app_name, side="left", width=230)
         self.drawer.add_item("Caja Diaria", command=self._show_caja_diaria, active=True)
-        self.drawer.add_item("Movimientos", command=self._show_caja_diaria)
+        self.drawer.add_item("Movimientos", command=lambda: self._show_placeholder_view("Movimientos"))
         self.drawer.add_item("Cuenta Corriente", command=lambda: self._show_placeholder_view("Cuenta Corriente"))
         self.drawer.add_item("Rendiciones", command=lambda: self._show_placeholder_view("Rendiciones"))
         self.drawer.add_item("Banco", command=lambda: self._show_placeholder_view("Banco"))
         self.drawer.add_item("Reportes", command=lambda: self._show_placeholder_view("Reportes"))
 
-        topbar = IHTopbar(
+        self.topbar = IHTopbar(
             shell,
             title="Caja Diaria",
             on_toggle_theme=self._toggle_theme,
             on_toggle_menu=self.drawer.toggle,
         )
-        topbar.grid(row=0, column=0, sticky="ew")
+        self.topbar.grid(row=0, column=0, sticky="ew")
 
         self.render_host = IHRenderHost(
             shell,
@@ -93,6 +92,7 @@ class MainWindow:
     def _show_caja_diaria(self) -> None:
         self.current_view_key = "caja_diaria"
         logger.info("RenderHost show view=caja_diaria")
+        self.topbar.set_title("Caja Diaria")
         self.render_host.show(
             lambda master: CajaDiariaView(master, self.api_client, self._reload_current_view),
             cache_key="caja_diaria",
@@ -102,8 +102,8 @@ class MainWindow:
     def _show_placeholder_view(self, title: str) -> None:
         key = f"placeholder:{title}"
         self.current_view_key = key
-        logger.info("RenderHost show view=caja_diaria")
         logger.info("RenderHost show placeholder title=%s", title)
+        self.topbar.set_title(title)
         self.render_host.show(lambda master: PlaceholderView(master, title), cache_key=key)
         self._close_drawer_if_open()
 
@@ -156,8 +156,13 @@ class CajaDiariaView(ttk.Frame):
 
     def prepare_for_render(self, on_done, on_error=None) -> None:
         try:
-            self.api_client.listar_movimientos()
-            self.status_message = "API conectada. Mostrando datos de prueba hasta que el service este listo."
+            respuesta = self.api_client.listar_movimientos()
+            data = respuesta.get("data", [])
+            if data:
+                self.movimientos_modelo = [movimiento_desde_api(d) for d in data]
+                self.status_message = f"API: {len(self.movimientos_modelo)} movimientos cargados."
+            else:
+                self.status_message = "API conectada. Sin movimientos aun — mostrando datos de prueba."
         except ApiClientError:
             self.status_message = "API no disponible. Mostrando datos de prueba."
 
@@ -184,31 +189,21 @@ class CajaDiariaView(ttk.Frame):
         self.metrics_host = ttk.Frame(page)
         self.metrics_host.pack(fill="x", pady=(0, 18))
 
-        stack = IHStack(page, padding=0)
-        stack.pack(fill="both", expand=True)
+        self._build_manual_form(page)
 
-        self._build_manual_form(stack)
-
-        self.table = IHTable(
-            stack,
-            columns=("Fecha", "Tipo", "Origen", "Estado", "Monto", "Descripcion"),
-            rows=[],
-            row_tag_key="semaforo",
-        )
-        stack.add(self.table, fill="both", pady=8)
-
-        footer = ttk.Frame(stack)
-        footer.pack(fill="x", pady=(8, 0))
+        footer = ttk.Frame(page)
+        footer.pack(side="bottom", fill="x", pady=(8, 0))
         IHButton(footer, text="Refrescar", variant="secondary", outline=True, command=self.on_reload).pack(side="left")
         self.status_var = tk.StringVar(value="API pendiente de consulta.")
         ttk.Label(footer, textvariable=self.status_var).pack(side="left", padx=(12, 0))
 
-        IHAlert(
-            stack,
-            title="Render seguro",
-            message="Esta vista se prepara dentro de IHRenderHost antes de mostrarse para evitar cortes visuales.",
-            variant="info",
-        ).pack(fill="x", pady=(12, 0))
+        self.table = IHTable(
+            page,
+            columns=("Fecha", "Tipo", "Origen", "Estado", "Monto", "Descripcion"),
+            rows=[],
+            row_tag_key="semaforo",
+        )
+        self.table.pack(fill="both", expand=True, pady=8)
 
     def _build_manual_form(self, parent) -> None:
         form = ttk.LabelFrame(parent, text="Carga manual de movimiento", padding=12)

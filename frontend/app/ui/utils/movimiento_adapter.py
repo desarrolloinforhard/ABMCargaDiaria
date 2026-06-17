@@ -2,9 +2,27 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
-from app.models.movimiento import EstadoMovimiento, Movimiento, TipoMovimiento
+from app.models.movimiento import EstadoMovimiento, Movimiento, OrigenMovimiento, TipoMovimiento
+
+
+def movimiento_desde_api(data: dict) -> Movimiento:
+    """Convierte un dict JSON de la API en un objeto Movimiento."""
+    return Movimiento(
+        id=data.get("id"),
+        fecha=date.fromisoformat(data["fecha"]),
+        tipo=TipoMovimiento(data["tipo"]),
+        estado=EstadoMovimiento(data["estado"]),
+        origen=OrigenMovimiento(data["origen"]),
+        monto=Decimal(str(data["monto"])),
+        descripcion=data.get("descripcion", ""),
+        es_cuenta_corriente=bool(data.get("esCuentaCorriente", False)),
+        empleado_id=data.get("empleadoId"),
+        rendicion_id=data.get("rendicionId"),
+        referencia_externa=data.get("referenciaExterna"),
+    )
 
 _TIPOS_EGRESO = frozenset({
     TipoMovimiento.EGRESO,

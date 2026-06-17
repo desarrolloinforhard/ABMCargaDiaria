@@ -11,7 +11,7 @@ from dataclasses import dataclass
 class AppSettings:
     app_name: str = "ABMCargaDiaria"
     app_version: str = "0.0.1"
-    default_theme: str = "inforhard_dark"
+    default_theme: str = "inforhard_light"
     window_width: int = 1280
     window_height: int = 780
 
