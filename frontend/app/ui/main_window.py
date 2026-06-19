@@ -65,7 +65,7 @@ class MainWindow:
 
         self.drawer = IHDrawerMenu(shell, title=settings.app_name, side="left", width=230)
         self.drawer.add_item("Caja Diaria", command=self._show_caja_diaria, active=True)
-        self.drawer.add_item("Movimientos", command=lambda: self._show_placeholder_view("Movimientos"))
+        self.drawer.add_item("Movimientos", command=self._show_movimientos)
         self.drawer.add_item("Cuenta Corriente", command=lambda: self._show_placeholder_view("Cuenta Corriente"))
         self.drawer.add_item("Rendiciones", command=lambda: self._show_placeholder_view("Rendiciones"))
         self.drawer.add_item("Banco", command=lambda: self._show_placeholder_view("Banco"))
@@ -115,6 +115,17 @@ class MainWindow:
         self.render_host.show(
             lambda master: CajaDiariaView(master, self.api_client, self._reload_current_view),
             cache_key="caja_diaria",
+        )
+        self._close_drawer_if_open()
+
+    def _show_movimientos(self) -> None:
+        self.current_view_key = "movimientos"
+        logger.info("RenderHost show view=movimientos")
+        self.topbar.set_title("Movimientos")
+        self._topbar_subtitle_var.set("")
+        self.render_host.show(
+            lambda master: MovimientosView(master, self.api_client),
+            cache_key="movimientos",
         )
         self._close_drawer_if_open()
 
@@ -470,6 +481,133 @@ class CajaDiariaView(ttk.Frame):
         except (TypeError, ValueError):
             amount = 0.0
         return f"$ {amount:,.2f}"
+
+
+class MovimientosView(ttk.Frame):
+    """Lista completa de movimientos con filtros por fecha, tipo y estado."""
+
+    def __init__(self, master, api_client: ApiClient) -> None:
+        super().__init__(master)
+        self.api_client = api_client
+        self.movimientos: list = []
+        self.status_message = "Cargando..."
+        self._build_widgets()
+
+    def should_prepare_for_render(self) -> bool:
+        return True
+
+    def prepare_for_render(self, on_done, on_error=None) -> None:
+        self._cargar_datos()
+        on_done()
+
+    def _cargar_datos(self, fecha_desde: str | None = None, fecha_hasta: str | None = None,
+                      tipo: str | None = None, estado: str | None = None) -> None:
+        try:
+            respuesta = self.api_client.listar_movimientos()
+            data = respuesta.get("data", [])
+            self.movimientos = data
+
+            if fecha_desde:
+                self.movimientos = [m for m in self.movimientos if m.get("fecha", "") >= fecha_desde]
+            if fecha_hasta:
+                self.movimientos = [m for m in self.movimientos if m.get("fecha", "") <= fecha_hasta]
+            if tipo:
+                self.movimientos = [m for m in self.movimientos if m.get("tipo") == tipo]
+            if estado:
+                self.movimientos = [m for m in self.movimientos if m.get("estado") == estado]
+
+            self.status_message = f"{len(self.movimientos)} movimientos."
+        except ApiClientError:
+            self.status_message = "API no disponible."
+
+        self._render_tabla()
+        self._set_status(self.status_message)
+
+    def _build_widgets(self) -> None:
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        page = IHPage(self, padding=24)
+        page.grid(row=0, column=0, sticky="nsew")
+        page.columnconfigure(0, weight=1)
+
+        IHSectionHeader(page, title="Movimientos", subtitle="Listado completo de movimientos registrados.").pack(fill="x", pady=(0, 16))
+
+        self._build_filtros(page)
+
+        self.tabla = IHTable(
+            page,
+            columns=("Fecha", "Tipo", "Origen", "Estado", "Monto", "Descripcion"),
+            rows=[],
+            row_tag_key="semaforo",
+        )
+        self.tabla.pack(fill="both", expand=True, pady=(0, 8))
+
+        footer = ttk.Frame(page)
+        footer.pack(side="bottom", fill="x", pady=(8, 0))
+        IHButton(footer, text="Refrescar", variant="secondary", outline=True, command=self._aplicar_filtros).pack(side="left")
+        self.status_var = tk.StringVar(value="")
+        ttk.Label(footer, textvariable=self.status_var).pack(side="left", padx=(12, 0))
+
+    def _build_filtros(self, parent) -> None:
+        bar = ttk.Frame(parent)
+        bar.pack(fill="x", pady=(0, 12))
+
+        ttk.Label(bar, text="Desde:").pack(side="left", padx=(0, 4))
+        self.filtro_desde = IHDateInput(bar, label=None)
+        self.filtro_desde.surface.configure(width=130)
+        self.filtro_desde.pack(side="left", padx=(0, 12))
+
+        ttk.Label(bar, text="Hasta:").pack(side="left", padx=(0, 4))
+        self.filtro_hasta = IHDateInput(bar, label=None)
+        self.filtro_hasta.surface.configure(width=130)
+        self.filtro_hasta.pack(side="left", padx=(0, 12))
+
+        ttk.Label(bar, text="Tipo:").pack(side="left", padx=(0, 4))
+        self.filtro_tipo = IHCombobox(
+            bar, label=None,
+            values=["(todos)"] + [t.value for t in TipoMovimiento],
+            state="readonly",
+        )
+        self.filtro_tipo.surface.configure(width=110)
+        self.filtro_tipo.pack(side="left", padx=(0, 12))
+        self.filtro_tipo.set("(todos)")
+
+        ttk.Label(bar, text="Estado:").pack(side="left", padx=(0, 4))
+        self.filtro_estado = IHCombobox(
+            bar, label=None,
+            values=["(todos)"] + [e.value for e in EstadoMovimiento],
+            state="readonly",
+        )
+        self.filtro_estado.surface.configure(width=120)
+        self.filtro_estado.pack(side="left", padx=(0, 12))
+        self.filtro_estado.set("(todos)")
+
+        IHButton(bar, text="Limpiar", variant="secondary", outline=True, command=self._limpiar_filtros).pack(side="right")
+        IHButton(bar, text="Filtrar", variant="primary", command=self._aplicar_filtros).pack(side="right", padx=(0, 6))
+
+    def _aplicar_filtros(self) -> None:
+        desde = self.filtro_desde.get().strip() or None
+        hasta = self.filtro_hasta.get().strip() or None
+        tipo_val = self.filtro_tipo.get().strip()
+        tipo = None if tipo_val == "(todos)" else tipo_val
+        estado_val = self.filtro_estado.get().strip()
+        estado = None if estado_val == "(todos)" else estado_val
+        self._cargar_datos(desde, hasta, tipo, estado)
+
+    def _limpiar_filtros(self) -> None:
+        self.filtro_desde.set("")
+        self.filtro_hasta.set("")
+        self.filtro_tipo.set("(todos)")
+        self.filtro_estado.set("(todos)")
+        self._cargar_datos()
+
+    def _render_tabla(self) -> None:
+        filas = [movimiento_desde_api(m) for m in self.movimientos]
+        self.tabla.load(movimientos_a_filas(filas))
+
+    def _set_status(self, message: str) -> None:
+        self.status_var.set(message)
 
 
 class PlaceholderView(ttk.Frame):
