@@ -78,7 +78,7 @@ class MainWindow:
         self.topbar.grid(row=0, column=0, sticky="ew")
         self._topbar_subtitle_var = tk.StringVar()
         ttk.Label(self.topbar, textvariable=self._topbar_subtitle_var, style="IH.TopbarTitle.TLabel").pack(side="right", padx=(0, 16))
-        self._db_badge = tk.Label(self.topbar, text="● DB ...", font=("Segoe UI", 9))
+        self._db_badge = ttk.Label(self.topbar, text="● DB ...", style="IH.TopbarTitle.TLabel", font=("Segoe UI", 11, "bold"))
         self._db_badge.pack(side="right", padx=(0, 12))
         self.root.after(300, self._refresh_asa9_status)
 
