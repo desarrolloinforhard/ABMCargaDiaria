@@ -21,3 +21,4 @@ backend/*-test.out.log
 backend/*-test.err.log
 logs/
 frontend/logs/
+backend/dba/
