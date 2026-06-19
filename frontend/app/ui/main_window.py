@@ -78,6 +78,9 @@ class MainWindow:
         self.topbar.grid(row=0, column=0, sticky="ew")
         self._topbar_subtitle_var = tk.StringVar()
         ttk.Label(self.topbar, textvariable=self._topbar_subtitle_var, style="IH.TopbarTitle.TLabel").pack(side="right", padx=(0, 16))
+        self._db_badge = tk.Label(self.topbar, text="● DB ...", font=("Segoe UI", 9))
+        self._db_badge.pack(side="right", padx=(0, 12))
+        self.root.after(300, self._refresh_asa9_status)
 
         self.render_host = IHRenderHost(
             shell,
@@ -148,6 +151,18 @@ class MainWindow:
         ttk.Label(frame, text=f"Detalle tecnico: {TKINFORHARD_IMPORT_ERROR}").pack(anchor="w")
         ttk.Separator(frame).pack(fill="x", pady=16)
         ttk.Label(frame, text="Espacio reservado para dashboard futuro.").pack(anchor="w")
+
+    def _refresh_asa9_status(self) -> None:
+        try:
+            respuesta = self.api_client.obtener_asa9_status()
+            status = respuesta.get("data", {}).get("status", {})
+            if status.get("ready"):
+                self._db_badge.configure(text="● DB lista", foreground="#22c55e")
+            else:
+                self._db_badge.configure(text="● DB sin conexion", foreground="#ef4444")
+        except ApiClientError:
+            self._db_badge.configure(text="● DB sin conexion", foreground="#ef4444")
+        self.root.after(30000, self._refresh_asa9_status)
 
     def _toggle_theme(self) -> None:
         toggle = getattr(self.root, "toggle_theme", None)

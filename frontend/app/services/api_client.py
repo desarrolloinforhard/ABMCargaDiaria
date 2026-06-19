@@ -35,6 +35,9 @@ class ApiClient:
     def crear_movimiento(self, movimiento: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/movimientos", movimiento)
 
+    def obtener_asa9_status(self) -> dict[str, Any]:
+        return self._request("GET", "/api/asa9/status")
+
     def obtener_caja_diaria(self, fecha: str | None = None) -> dict[str, Any]:
         query = f"?{urlencode({'fecha': fecha})}" if fecha else ""
         return self._request("GET", f"/api/caja/diaria{query}")
