@@ -163,6 +163,7 @@ class CajaDiariaView(ttk.Frame):
         self.api_client = api_client
         self.on_reload = on_reload
         self.movimientos_modelo: list[Movimiento] = list(MOVIMIENTOS_MOCK)
+        self.caja_data: dict | None = None
         self.status_message = "Preparando vista..."
         self._build_widgets()
 
@@ -178,8 +179,12 @@ class CajaDiariaView(ttk.Frame):
                 self.status_message = f"API: {len(self.movimientos_modelo)} movimientos cargados."
             else:
                 self.status_message = "API conectada. Sin movimientos aun — mostrando datos de prueba."
+
+            caja_respuesta = self.api_client.obtener_caja_diaria()
+            self.caja_data = caja_respuesta.get("data")
         except ApiClientError:
             self.status_message = "API no disponible. Mostrando datos de prueba."
+            self.caja_data = None
 
         self._render_metrics()
         self._render_table()
@@ -281,15 +286,25 @@ class CajaDiariaView(ttk.Frame):
         for child in self.metrics_host.winfo_children():
             child.destroy()
 
-        metricas = calcular_metricas(self.movimientos_modelo)
+        if self.caja_data:
+            estados = self.caja_data.get("estados", {})
+            metric_data = [
+                ("Ingresos", self._money(self.caja_data.get("ingresos")), f"{self.caja_data.get('movimientosTotal', 0)} mov."),
+                ("Egresos", self._money(self.caja_data.get("egresos")), "Efectivo y rendiciones"),
+                ("Efectivo", self._money(self.caja_data.get("efectivo")), "Impacto neto"),
+                ("Banco", self._money(self.caja_data.get("banco")), f"Pendientes: {estados.get('pendientes', 0)}"),
+            ]
+        else:
+            metricas = calcular_metricas(self.movimientos_modelo)
+            metric_data = [
+                ("Ingresos", self._money(metricas["ingresos"]), f"{metricas['total_movimientos']} mov."),
+                ("Egresos", self._money(metricas["egresos"]), "Efectivo y rendiciones"),
+                ("Efectivo", self._money(metricas["efectivo"]), "Impacto neto"),
+                ("Banco", self._money(metricas["banco"]), f"Pendientes: {metricas['pendientes']}"),
+            ]
+
         metrics = IHGrid(self.metrics_host, columns=4, gap=12)
         metrics.pack(fill="x")
-        metric_data = [
-            ("Ingresos", self._money(metricas["ingresos"]), f"{metricas['total_movimientos']} mov."),
-            ("Egresos", self._money(metricas["egresos"]), "Efectivo y rendiciones"),
-            ("Efectivo", self._money(metricas["efectivo"]), "Impacto neto"),
-            ("Banco", self._money(metricas["banco"]), f"Pendientes: {metricas['pendientes']}"),
-        ]
         for index, (title, value, delta) in enumerate(metric_data):
             card = IHMetricCard(metrics, title=title, value=value, delta=delta, variant="outlined")
             card.canvas.configure(height=1)
