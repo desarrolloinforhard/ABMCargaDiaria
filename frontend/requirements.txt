@@ -1,3 +1,4 @@
 ﻿ttkbootstrap>=1.10
 pyodbc>=5.0
+tkcalendar>=1.6
 -e ../../TkInforHard

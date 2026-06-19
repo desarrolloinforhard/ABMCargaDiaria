@@ -3,8 +3,8 @@ const movimientosService = require("../services/movimientos.service");
 
 const router = Router();
 
-router.get("/", (_req, res) => {
-  res.json(movimientosService.listarMovimientos());
+router.get("/", (req, res) => {
+  res.json(movimientosService.listarMovimientos(req.query.fecha || null));
 });
 
 router.post("/", (req, res) => {

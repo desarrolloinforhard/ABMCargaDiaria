@@ -26,6 +26,8 @@ from app.config.tkinforhard import (
     TKINFORHARD_AVAILABLE,
     TKINFORHARD_IMPORT_ERROR,
 )
+from tkcalendar import Calendar
+
 from app.models import EstadoMovimiento, Movimiento, OrigenMovimiento, TipoMovimiento
 from app.ui.mocks import MOVIMIENTOS_MOCK
 from app.services.api_client import ApiClient, ApiClientError
@@ -179,6 +181,7 @@ class CajaDiariaView(ttk.Frame):
         self.on_reload = on_reload
         self.movimientos_modelo: list[Movimiento] = list(MOVIMIENTOS_MOCK)
         self.caja_data: dict | None = None
+        self._fecha_filtro: str | None = None
         self.status_message = "Preparando vista..."
         self._build_widgets()
 
@@ -186,16 +189,22 @@ class CajaDiariaView(ttk.Frame):
         return True
 
     def prepare_for_render(self, on_done, on_error=None) -> None:
+        self._cargar_datos(self._fecha_filtro)
+        on_done()
+
+    def _cargar_datos(self, fecha: str | None = None) -> None:
         try:
-            respuesta = self.api_client.listar_movimientos()
+            respuesta = self.api_client.listar_movimientos(fecha)
             data = respuesta.get("data", [])
             if data:
                 self.movimientos_modelo = [movimiento_desde_api(d) for d in data]
-                self.status_message = f"API: {len(self.movimientos_modelo)} movimientos cargados."
+                sufijo = f" ({fecha})" if fecha else ""
+                self.status_message = f"API: {len(self.movimientos_modelo)} movimientos cargados{sufijo}."
             else:
-                self.status_message = "API conectada. Sin movimientos aun — mostrando datos de prueba."
+                self.movimientos_modelo = []
+                self.status_message = "Sin movimientos para la fecha seleccionada." if fecha else "API conectada. Sin movimientos aun."
 
-            caja_respuesta = self.api_client.obtener_caja_diaria()
+            caja_respuesta = self.api_client.obtener_caja_diaria(fecha)
             self.caja_data = caja_respuesta.get("data")
         except ApiClientError:
             self.status_message = "API no disponible. Mostrando datos de prueba."
@@ -204,7 +213,6 @@ class CajaDiariaView(ttk.Frame):
         self._render_metrics()
         self._render_table()
         self._set_status(self.status_message)
-        on_done()
 
     def _build_widgets(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -213,6 +221,8 @@ class CajaDiariaView(ttk.Frame):
         page = IHPage(self, padding=24)
         page.grid(row=0, column=0, sticky="nsew")
         page.columnconfigure(0, weight=1)
+
+        self._build_filter_bar(page)
 
         self.metrics_host = ttk.Frame(page)
         self.metrics_host.pack(fill="x", pady=(0, 18))
@@ -232,6 +242,107 @@ class CajaDiariaView(ttk.Frame):
             row_tag_key="semaforo",
         )
         self.table.pack(fill="both", expand=True, pady=8)
+
+    def _build_filter_bar(self, parent) -> None:
+        bar = ttk.Frame(parent)
+        bar.pack(fill="x", pady=(0, 12))
+        IHButton(bar, text="Limpiar", variant="secondary", outline=True, command=self._limpiar_filtro).pack(side="right")
+        IHButton(bar, text="Filtrar", variant="primary", command=self._aplicar_filtro).pack(side="right", padx=(0, 6))
+        ttk.Label(bar, text="Filtrar por fecha:").pack(side="left", padx=(0, 8))
+        self.filtro_fecha_input = IHDateInput(bar, label=None)
+        self.filtro_fecha_input.surface.configure(width=160)
+        self.filtro_fecha_input.pack(side="left")
+        tk.Button(
+            bar,
+            text="📅",
+            relief="flat",
+            cursor="hand2",
+            font=("Segoe UI", 12),
+            command=self._abrir_calendario,
+        ).pack(side="left", padx=(4, 0))
+
+    def _abrir_calendario(self) -> None:
+        popup = tk.Toplevel(self)
+        popup.title("")
+        popup.resizable(False, False)
+        popup.grab_set()
+        popup.configure(bg="#ffffff")
+        x = self.filtro_fecha_input.winfo_rootx()
+        y = self.filtro_fecha_input.winfo_rooty() + self.filtro_fecha_input.winfo_height() + 4
+        popup.geometry(f"+{x}+{y}")
+
+        actual = self.filtro_fecha_input.get().strip()
+        try:
+            año, mes, dia = (int(x) for x in actual.split("-"))
+        except ValueError:
+            from datetime import date
+            hoy = date.today()
+            año, mes, dia = hoy.year, hoy.month, hoy.day
+
+        cal = Calendar(
+            popup,
+            selectmode="day",
+            year=año, month=mes, day=dia,
+            date_pattern="yyyy-mm-dd",
+            background="#008A46",
+            foreground="white",
+            headersbackground="#008A46",
+            headersforeground="white",
+            selectbackground="#005522",
+            selectforeground="white",
+            normalbackground="#ffffff",
+            normalforeground="#1a1a1a",
+            weekendbackground="#f0faf4",
+            weekendforeground="#008A46",
+            othermonthbackground="#f5f5f5",
+            othermonthforeground="#aaaaaa",
+            othermonthwebackground="#f5f5f5",
+            othermonthweforeground="#cccccc",
+            font=("Segoe UI", 10),
+            showweeknumbers=False,
+        )
+        cal.pack(padx=0, pady=0)
+        try:
+            cal._header_lbl.configure(background="#008A46", foreground="white")
+            cal._l_arrow.configure(background="#008A46", foreground="white")
+            cal._r_arrow.configure(background="#008A46", foreground="white")
+        except Exception:
+            pass
+
+        def _confirmar():
+            self.filtro_fecha_input.set(cal.get_date())
+            popup.destroy()
+
+        btn_frame = tk.Frame(popup, bg="#ffffff")
+        btn_frame.pack(fill="x", padx=12, pady=(4, 12))
+        tk.Button(
+            btn_frame,
+            text="Confirmar",
+            command=_confirmar,
+            relief="flat",
+            bg="#008A46",
+            fg="white",
+            activebackground="#006633",
+            activeforeground="white",
+            font=("Segoe UI", 10, "bold"),
+            padx=16,
+            pady=7,
+            cursor="hand2",
+            bd=0,
+        ).pack(fill="x")
+
+    def _aplicar_filtro(self) -> None:
+        fecha = self.filtro_fecha_input.get().strip()
+        if not fecha:
+            self._set_status("Ingresa una fecha para filtrar.")
+            return
+        self._fecha_filtro = fecha
+        self._cargar_datos(fecha)
+
+    def _limpiar_filtro(self) -> None:
+        self._fecha_filtro = None
+        self.filtro_fecha_input.set("")
+        self._cargar_datos(None)
 
     def _build_manual_form(self, parent) -> None:
         form = ttk.LabelFrame(parent, text="Carga manual de movimiento", padding=12)

@@ -29,8 +29,9 @@ class ApiClient:
         self.config = config or ApiClientConfig()
         logger.debug("ApiClient inicializado base_url=%s timeout=%s", self.config.base_url, self.config.timeout)
 
-    def listar_movimientos(self) -> dict[str, Any]:
-        return self._request("GET", "/api/movimientos")
+    def listar_movimientos(self, fecha: str | None = None) -> dict[str, Any]:
+        query = f"?{urlencode({'fecha': fecha})}" if fecha else ""
+        return self._request("GET", f"/api/movimientos{query}")
 
     def crear_movimiento(self, movimiento: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/movimientos", movimiento)

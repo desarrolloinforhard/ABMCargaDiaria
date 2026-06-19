@@ -1,12 +1,15 @@
 ﻿const movimientosRepository = require("../repositories/movimientos.repository");
 const { validarMovimiento } = require("../models/movimiento.model");
 
-function listarMovimientos() {
+function listarMovimientos(fecha = null) {
+  const todos = movimientosRepository.listarMovimientos();
+  const data = fecha ? todos.filter((m) => m.fecha === fecha) : todos;
   return {
-    data: movimientosRepository.listarMovimientos(),
+    data,
     meta: {
-      total: movimientosRepository.listarMovimientos().length,
+      total: data.length,
       source: "mock",
+      ...(fecha && { fechaFiltro: fecha }),
     },
   };
 }
