@@ -313,16 +313,24 @@ class CajaDiariaView(ttk.Frame):
         self.monto_input.grid(row=0, column=3, sticky="ew", padx=8, pady=(0, 8))
         self.monto_input.entry.bind("<FocusOut>", self._format_monto, add="+")
         self.monto_input.entry.bind("<FocusIn>", self._unformat_monto, add="+")
+        self.monto_input.entry.bind("<FocusIn>", lambda e: self.monto_input.clear_error(), add="+")
+        self.monto_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
 
         self.descripcion_input = IHInput(form, label="Descripcion", placeholder="Detalle del movimiento")
         self.descripcion_input.grid(row=0, column=4, sticky="ew", padx=8, pady=(0, 8))
+        self.descripcion_input.entry.bind("<FocusIn>", lambda e: self.descripcion_input.clear_error(), add="+")
+        self.descripcion_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
 
         actions = ttk.Frame(form)
         actions.grid(row=0, column=5, sticky="sew", padx=(8, 0), pady=(18, 8))
         IHButton(actions, text="Guardar", variant="success", command=self._crear_movimiento_manual).pack(side="left")
 
         self.empleado_input = IHInput(form, label="Empleado ID", placeholder="ID del empleado")
+        self.empleado_input.entry.bind("<FocusIn>", lambda e: self.empleado_input.clear_error(), add="+")
+        self.empleado_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
         self.rendicion_input = IHInput(form, label="Rendición ID", placeholder="ID de rendición")
+        self.rendicion_input.entry.bind("<FocusIn>", lambda e: self.rendicion_input.clear_error(), add="+")
+        self.rendicion_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
         self._cuenta_corriente_var = tk.BooleanVar(value=False)
         self._cc_check = ttk.Checkbutton(form, text="Cuenta Corriente", variable=self._cuenta_corriente_var)
 
@@ -353,29 +361,69 @@ class CajaDiariaView(ttk.Frame):
 
     def _crear_movimiento_manual(self) -> None:
         tipo = self.tipo_input.get().strip()
+        monto_raw = self.monto_input.get().strip().replace(",", "")
+        descripcion = self.descripcion_input.get().strip()
         empleado_val = self.empleado_input.get().strip()
         rendicion_val = self.rendicion_input.get().strip()
+
+        self.monto_input.clear_error()
+        self.descripcion_input.clear_error()
+        self.empleado_input.clear_error()
+        self.rendicion_input.clear_error()
+
+        valido = True
+
+        if not monto_raw:
+            self.monto_input.set_error()
+            valido = False
+        else:
+            try:
+                float(monto_raw)
+            except ValueError:
+                self.monto_input.set_error()
+                valido = False
+
+        if not descripcion:
+            self.descripcion_input.set_error()
+            valido = False
+
+        if tipo in (TipoMovimiento.ADELANTO.value, TipoMovimiento.PLUS.value):
+            if not empleado_val:
+                self.empleado_input.set_error()
+                valido = False
+            elif not empleado_val.isdigit():
+                self.empleado_input.set_error()
+                valido = False
+
+        if tipo == TipoMovimiento.RENDICION.value:
+            if not rendicion_val:
+                self.rendicion_input.set_error()
+                valido = False
+            elif not rendicion_val.isdigit():
+                self.rendicion_input.set_error()
+                valido = False
+
+        if not valido:
+            self._set_status("Corregí los campos marcados en rojo.")
+            return
+
         payload = {
             "fecha": self.fecha_input.entry.get().strip(),
             "tipo": tipo,
             "estado": self.estado_input.get().strip(),
             "origen": OrigenMovimiento.MANUAL.value,
-            "monto": self.monto_input.get().strip().replace(",", ""),
-            "descripcion": self.descripcion_input.get().strip(),
+            "monto": monto_raw,
+            "descripcion": descripcion,
             "esCuentaCorriente": self._cuenta_corriente_var.get() if tipo in (TipoMovimiento.INGRESO.value, TipoMovimiento.EGRESO.value) else False,
             "empleadoId": int(empleado_val) if empleado_val else None,
             "rendicionId": int(rendicion_val) if rendicion_val else None,
             "referenciaExterna": None,
         }
 
-        if not payload["fecha"] or not payload["monto"] or not payload["descripcion"]:
-            self._set_status("Completa fecha, monto y descripcion antes de guardar.")
-            return
-
         try:
             self.api_client.crear_movimiento(payload)
             self._clear_form_after_save()
-            self._set_status("Movimiento guardado. Renderizando vista actualizada...")
+            self._set_status("Movimiento guardado.")
             self.on_reload()
         except ApiClientError as exc:
             self._set_status(f"No se pudo guardar: {exc}")
