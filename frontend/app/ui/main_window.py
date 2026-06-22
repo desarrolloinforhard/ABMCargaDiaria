@@ -311,6 +311,8 @@ class CajaDiariaView(ttk.Frame):
 
         self.monto_input = IHInput(form, label="Monto", placeholder="0.00")
         self.monto_input.grid(row=0, column=3, sticky="ew", padx=8, pady=(0, 8))
+        self.monto_input.entry.bind("<FocusOut>", self._format_monto, add="+")
+        self.monto_input.entry.bind("<FocusIn>", self._unformat_monto, add="+")
 
         self.descripcion_input = IHInput(form, label="Descripcion", placeholder="Detalle del movimiento")
         self.descripcion_input.grid(row=0, column=4, sticky="ew", padx=8, pady=(0, 8))
@@ -338,6 +340,17 @@ class CajaDiariaView(ttk.Frame):
         if tipo in (TipoMovimiento.INGRESO.value, TipoMovimiento.EGRESO.value):
             self._cc_check.grid(row=1, column=2, sticky="w", padx=8, pady=(0, 8))
 
+    def _format_monto(self, event=None) -> None:
+        raw = self.monto_input.get().strip().replace(",", "")
+        try:
+            self.monto_input.set(f"{float(raw):,.2f}")
+        except ValueError:
+            pass
+
+    def _unformat_monto(self, event=None) -> None:
+        val = self.monto_input.get().strip().replace(",", "")
+        self.monto_input.set(val)
+
     def _crear_movimiento_manual(self) -> None:
         tipo = self.tipo_input.get().strip()
         empleado_val = self.empleado_input.get().strip()
@@ -347,7 +360,7 @@ class CajaDiariaView(ttk.Frame):
             "tipo": tipo,
             "estado": self.estado_input.get().strip(),
             "origen": OrigenMovimiento.MANUAL.value,
-            "monto": self.monto_input.get().strip(),
+            "monto": self.monto_input.get().strip().replace(",", ""),
             "descripcion": self.descripcion_input.get().strip(),
             "esCuentaCorriente": self._cuenta_corriente_var.get() if tipo in (TipoMovimiento.INGRESO.value, TipoMovimiento.EGRESO.value) else False,
             "empleadoId": int(empleado_val) if empleado_val else None,
