@@ -298,6 +298,7 @@ class CajaDiariaView(ttk.Frame):
         )
         self.tipo_input.grid(row=0, column=1, sticky="ew", padx=8, pady=(0, 8))
         self.tipo_input.set(TipoMovimiento.INGRESO.value)
+        self.tipo_input.surface.bind("<<ComboboxSelected>>", self._on_tipo_changed)
 
         self.estado_input = IHCombobox(
             form,
@@ -318,17 +319,39 @@ class CajaDiariaView(ttk.Frame):
         actions.grid(row=0, column=5, sticky="sew", padx=(8, 0), pady=(18, 8))
         IHButton(actions, text="Guardar", variant="success", command=self._crear_movimiento_manual).pack(side="left")
 
+        self.empleado_input = IHInput(form, label="Empleado ID", placeholder="ID del empleado")
+        self.rendicion_input = IHInput(form, label="Rendición ID", placeholder="ID de rendición")
+        self._cuenta_corriente_var = tk.BooleanVar(value=False)
+        self._cc_check = ttk.Checkbutton(form, text="Cuenta Corriente", variable=self._cuenta_corriente_var)
+
+    def _on_tipo_changed(self, event=None) -> None:
+        tipo = self.tipo_input.get().strip()
+        self.empleado_input.grid_remove()
+        self.rendicion_input.grid_remove()
+        self._cc_check.grid_remove()
+
+        if tipo in (TipoMovimiento.ADELANTO.value, TipoMovimiento.PLUS.value):
+            self.empleado_input.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 8), pady=(0, 8))
+        elif tipo == TipoMovimiento.RENDICION.value:
+            self.rendicion_input.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(0, 8), pady=(0, 8))
+
+        if tipo in (TipoMovimiento.INGRESO.value, TipoMovimiento.EGRESO.value):
+            self._cc_check.grid(row=1, column=2, sticky="w", padx=8, pady=(0, 8))
+
     def _crear_movimiento_manual(self) -> None:
+        tipo = self.tipo_input.get().strip()
+        empleado_val = self.empleado_input.get().strip()
+        rendicion_val = self.rendicion_input.get().strip()
         payload = {
             "fecha": self.fecha_input.entry.get().strip(),
-            "tipo": self.tipo_input.get().strip(),
+            "tipo": tipo,
             "estado": self.estado_input.get().strip(),
             "origen": OrigenMovimiento.MANUAL.value,
             "monto": self.monto_input.get().strip(),
             "descripcion": self.descripcion_input.get().strip(),
-            "esCuentaCorriente": False,
-            "empleadoId": None,
-            "rendicionId": None,
+            "esCuentaCorriente": self._cuenta_corriente_var.get() if tipo in (TipoMovimiento.INGRESO.value, TipoMovimiento.EGRESO.value) else False,
+            "empleadoId": int(empleado_val) if empleado_val else None,
+            "rendicionId": int(rendicion_val) if rendicion_val else None,
             "referenciaExterna": None,
         }
 
@@ -384,6 +407,10 @@ class CajaDiariaView(ttk.Frame):
         self.estado_input.set(EstadoMovimiento.PENDIENTE.value)
         self.monto_input.set("")
         self.descripcion_input.set("")
+        self.empleado_input.set("")
+        self.rendicion_input.set("")
+        self._cuenta_corriente_var.set(False)
+        self._on_tipo_changed()
 
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
