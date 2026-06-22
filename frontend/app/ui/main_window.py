@@ -14,7 +14,6 @@ from app.config.tkinforhard import (
     IHButton,
     IHCombobox,
     IHSectionHeader,
-    IHDateInput,
     IHDrawerMenu,
     IHGrid,
     IHInput,
@@ -26,7 +25,7 @@ from app.config.tkinforhard import (
     TKINFORHARD_AVAILABLE,
     TKINFORHARD_IMPORT_ERROR,
 )
-from tkcalendar import Calendar
+from ttkbootstrap.widgets import DateEntry
 
 from app.models import EstadoMovimiento, Movimiento, OrigenMovimiento, TipoMovimiento
 from app.ui.mocks import MOVIMIENTOS_MOCK
@@ -260,90 +259,14 @@ class CajaDiariaView(ttk.Frame):
         IHButton(bar, text="Limpiar", variant="secondary", outline=True, command=self._limpiar_filtro).pack(side="right")
         IHButton(bar, text="Filtrar", variant="primary", command=self._aplicar_filtro).pack(side="right", padx=(0, 6))
         ttk.Label(bar, text="Filtrar por fecha:").pack(side="left", padx=(0, 8))
-        self.filtro_fecha_input = IHDateInput(bar, label=None)
-        self.filtro_fecha_input.surface.configure(width=160)
-        self.filtro_fecha_input.pack(side="left")
-        tk.Button(
-            bar,
-            text="📅",
-            relief="flat",
-            cursor="hand2",
-            font=("Segoe UI", 12),
-            command=self._abrir_calendario,
-        ).pack(side="left", padx=(4, 0))
-
-    def _abrir_calendario(self) -> None:
-        popup = tk.Toplevel(self)
-        popup.title("")
-        popup.resizable(False, False)
-        popup.grab_set()
-        popup.configure(bg="#ffffff")
-        x = self.filtro_fecha_input.winfo_rootx()
-        y = self.filtro_fecha_input.winfo_rooty() + self.filtro_fecha_input.winfo_height() + 4
-        popup.geometry(f"+{x}+{y}")
-
-        actual = self.filtro_fecha_input.get().strip()
-        try:
-            año, mes, dia = (int(x) for x in actual.split("-"))
-        except ValueError:
-            from datetime import date
-            hoy = date.today()
-            año, mes, dia = hoy.year, hoy.month, hoy.day
-
-        cal = Calendar(
-            popup,
-            selectmode="day",
-            year=año, month=mes, day=dia,
-            date_pattern="yyyy-mm-dd",
-            background="#008A46",
-            foreground="white",
-            headersbackground="#008A46",
-            headersforeground="white",
-            selectbackground="#005522",
-            selectforeground="white",
-            normalbackground="#ffffff",
-            normalforeground="#1a1a1a",
-            weekendbackground="#f0faf4",
-            weekendforeground="#008A46",
-            othermonthbackground="#f5f5f5",
-            othermonthforeground="#aaaaaa",
-            othermonthwebackground="#f5f5f5",
-            othermonthweforeground="#cccccc",
-            font=("Segoe UI", 10),
-            showweeknumbers=False,
+        self.filtro_fecha_input = DateEntry(
+            bar, dateformat="%Y-%m-%d", firstweekday=0,
+            startdate=date.today(), bootstyle="success", width=12,
         )
-        cal.pack(padx=0, pady=0)
-        try:
-            cal._header_lbl.configure(background="#008A46", foreground="white")
-            cal._l_arrow.configure(background="#008A46", foreground="white")
-            cal._r_arrow.configure(background="#008A46", foreground="white")
-        except Exception:
-            pass
-
-        def _confirmar():
-            self.filtro_fecha_input.set(cal.get_date())
-            popup.destroy()
-
-        btn_frame = tk.Frame(popup, bg="#ffffff")
-        btn_frame.pack(fill="x", padx=12, pady=(4, 12))
-        tk.Button(
-            btn_frame,
-            text="Confirmar",
-            command=_confirmar,
-            relief="flat",
-            bg="#008A46",
-            fg="white",
-            activebackground="#006633",
-            activeforeground="white",
-            font=("Segoe UI", 10, "bold"),
-            padx=16,
-            pady=7,
-            cursor="hand2",
-            bd=0,
-        ).pack(fill="x")
+        self.filtro_fecha_input.pack(side="left")
 
     def _aplicar_filtro(self) -> None:
-        fecha = self.filtro_fecha_input.get().strip()
+        fecha = self.filtro_fecha_input.entry.get().strip()
         if not fecha:
             self._set_status("Ingresa una fecha para filtrar.")
             return
@@ -352,7 +275,7 @@ class CajaDiariaView(ttk.Frame):
 
     def _limpiar_filtro(self) -> None:
         self._fecha_filtro = None
-        self.filtro_fecha_input.set("")
+        self.filtro_fecha_input.entry.delete(0, "end")
         self._cargar_datos(None)
 
     def _build_manual_form(self, parent) -> None:
@@ -361,9 +284,11 @@ class CajaDiariaView(ttk.Frame):
         for column in range(6):
             form.columnconfigure(column, weight=1)
 
-        self.fecha_input = IHDateInput(form)
+        self.fecha_input = DateEntry(
+            form, dateformat="%Y-%m-%d", firstweekday=0,
+            startdate=date.today(), bootstyle="success", width=12,
+        )
         self.fecha_input.grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
-        self.fecha_input.set(date.today().isoformat())
 
         self.tipo_input = IHCombobox(
             form,
@@ -395,7 +320,7 @@ class CajaDiariaView(ttk.Frame):
 
     def _crear_movimiento_manual(self) -> None:
         payload = {
-            "fecha": self.fecha_input.get().strip(),
+            "fecha": self.fecha_input.entry.get().strip(),
             "tipo": self.tipo_input.get().strip(),
             "estado": self.estado_input.get().strip(),
             "origen": OrigenMovimiento.MANUAL.value,
@@ -453,7 +378,8 @@ class CajaDiariaView(ttk.Frame):
         self.table.load(movimientos_a_filas(self.movimientos_modelo))
 
     def _clear_form_after_save(self) -> None:
-        self.fecha_input.set(date.today().isoformat())
+        self.fecha_input.entry.delete(0, "end")
+        self.fecha_input.entry.insert(0, date.today().isoformat())
         self.tipo_input.set(TipoMovimiento.INGRESO.value)
         self.estado_input.set(EstadoMovimiento.PENDIENTE.value)
         self.monto_input.set("")
@@ -554,13 +480,17 @@ class MovimientosView(ttk.Frame):
         bar.pack(fill="x", pady=(0, 12))
 
         ttk.Label(bar, text="Desde:").pack(side="left", padx=(0, 4))
-        self.filtro_desde = IHDateInput(bar, label=None)
-        self.filtro_desde.surface.configure(width=130)
+        self.filtro_desde = DateEntry(
+            bar, dateformat="%Y-%m-%d", firstweekday=0,
+            startdate=date.today(), bootstyle="primary", width=12,
+        )
         self.filtro_desde.pack(side="left", padx=(0, 12))
 
         ttk.Label(bar, text="Hasta:").pack(side="left", padx=(0, 4))
-        self.filtro_hasta = IHDateInput(bar, label=None)
-        self.filtro_hasta.surface.configure(width=130)
+        self.filtro_hasta = DateEntry(
+            bar, dateformat="%Y-%m-%d", firstweekday=0,
+            startdate=date.today(), bootstyle="primary", width=12,
+        )
         self.filtro_hasta.pack(side="left", padx=(0, 12))
 
         ttk.Label(bar, text="Tipo:").pack(side="left", padx=(0, 4))
@@ -587,8 +517,8 @@ class MovimientosView(ttk.Frame):
         IHButton(bar, text="Filtrar", variant="primary", command=self._aplicar_filtros).pack(side="right", padx=(0, 6))
 
     def _aplicar_filtros(self) -> None:
-        desde = self.filtro_desde.get().strip() or None
-        hasta = self.filtro_hasta.get().strip() or None
+        desde = self.filtro_desde.entry.get().strip() or None
+        hasta = self.filtro_hasta.entry.get().strip() or None
         tipo_val = self.filtro_tipo.get().strip()
         tipo = None if tipo_val == "(todos)" else tipo_val
         estado_val = self.filtro_estado.get().strip()
@@ -596,8 +526,8 @@ class MovimientosView(ttk.Frame):
         self._cargar_datos(desde, hasta, tipo, estado)
 
     def _limpiar_filtros(self) -> None:
-        self.filtro_desde.set("")
-        self.filtro_hasta.set("")
+        self.filtro_desde.entry.delete(0, "end")
+        self.filtro_hasta.entry.delete(0, "end")
         self.filtro_tipo.set("(todos)")
         self.filtro_estado.set("(todos)")
         self._cargar_datos()
