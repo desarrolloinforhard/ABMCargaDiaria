@@ -62,7 +62,19 @@ csv_banco
 
 ## GET /api/movimientos
 
-Lista movimientos normalizados.
+Lista movimientos normalizados. Acepta filtros opcionales por query params.
+
+### Query params opcionales
+
+| Param       | Descripcion                          | Ejemplo              |
+|-------------|--------------------------------------|----------------------|
+| fecha       | Fecha exacta (YYYY-MM-DD)            | ?fecha=2026-06-17    |
+| fechaDesde  | Desde esta fecha inclusive           | ?fechaDesde=2026-06-01 |
+| fechaHasta  | Hasta esta fecha inclusive           | ?fechaHasta=2026-06-30 |
+| tipo        | Filtra por tipo de movimiento        | ?tipo=egreso         |
+| estado      | Filtra por estado                    | ?estado=pendiente    |
+
+Los filtros son combinables entre si.
 
 ### Response 200
 
@@ -71,14 +83,38 @@ Lista movimientos normalizados.
   "data": [],
   "meta": {
     "total": 0,
-    "source": "mock"
+    "source": "json",
+    "fechaDesde": "2026-06-01",
+    "fechaHasta": "2026-06-30",
+    "tipoFiltro": "egreso",
+    "estadoFiltro": "pendiente"
   }
+}
+```
+
+## GET /api/movimientos/:id
+
+Devuelve un movimiento por id.
+
+### Response 200
+
+```json
+{
+  "data": { ...movimiento }
+}
+```
+
+### Response 404
+
+```json
+{
+  "error": { "code": "NOT_FOUND", "message": "Movimiento no encontrado", "details": [] }
 }
 ```
 
 ## POST /api/movimientos
 
-Crea un movimiento manual. En esta fase usa repository en memoria/mock.
+Crea un movimiento manual.
 
 ### Request body
 
@@ -128,6 +164,52 @@ Crea un movimiento manual. En esta fase usa repository en memoria/mock.
     "message": "El campo tipo es obligatorio o invalido.",
     "details": []
   }
+}
+```
+
+## PATCH /api/movimientos/:id/estado
+
+Cambia el estado de un movimiento y recalcula `impactaEfectivo` e `impactoEnFlujo`.
+
+### Request body
+
+```json
+{ "estado": "confirmado" }
+```
+
+### Response 200
+
+```json
+{
+  "data": { ...movimiento actualizado }
+}
+```
+
+### Response 400 - Estado invalido
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Estado invalido",
+    "details": ["estado debe ser uno de: pendiente, confirmado, conciliado, anulado"]
+  }
+}
+```
+
+## DELETE /api/movimientos/:id
+
+Elimina un movimiento y persiste el cambio en JSON.
+
+### Response 204
+
+Sin cuerpo.
+
+### Response 404
+
+```json
+{
+  "error": { "code": "NOT_FOUND", "message": "Movimiento no encontrado", "details": [] }
 }
 ```
 

@@ -1,4 +1,4 @@
-﻿# Fase 6 - Preparacion ASA9 ODBC 32-bit desde backend
+# Fase 6 - Preparacion ASA9 ODBC 32-bit desde backend
 
 ## Objetivo
 
@@ -39,3 +39,28 @@ Preparar el backend para integrar ASA9 / Sybase SQL Anywhere sin conectar todavi
 ## Proxima fase
 
 Fase 7 - Ventas factura y remito via API, o prueba tecnica de conexion ASA9 si el entorno ODBC esta listo.
+
+---
+
+## Fase 6.5 - Mejoras API movimientos y UI Movimientos (2026-06-23)
+
+Trabajo realizado fuera del roadmap principal mientras se espera confirmacion del entorno ASA9.
+
+### Backend
+
+- `GET /api/movimientos` acepta filtros por query params: `?fecha`, `?fechaDesde`, `?fechaHasta`, `?tipo`, `?estado` (combinables).
+- `GET /api/movimientos/:id` devuelve un movimiento por id o 404.
+- `PATCH /api/movimientos/:id/estado` cambia el estado y recalcula `impactaEfectivo` e `impactoEnFlujo`.
+- `DELETE /api/movimientos/:id` elimina el movimiento y persiste en JSON. Devuelve 204.
+- `meta.source` corregido de `"mock"` a `"json"` en services de movimientos y caja.
+- 14/14 tests en verde.
+
+### Frontend
+
+- `ApiClient.listar_movimientos` acepta `fecha_desde`, `fecha_hasta`, `tipo`, `estado` como params opcionales.
+- `ApiClient.actualizar_estado(id, estado)` llama al PATCH.
+- `ApiClient.eliminar_movimiento(id)` llama al DELETE.
+- `MovimientosView` delega filtrado al backend en lugar de filtrar en Python.
+- Footer de `MovimientosView`: al seleccionar una fila se habilitan combobox de estado y botones "Cambiar estado" y "Eliminar".
+- Boton "Eliminar" abre modal de confirmacion con botones Cancelar (gris) y Eliminar (rojo).
+- Tag "grey" para movimientos Anulados en ambas tablas (CajaDiaria y Movimientos).
