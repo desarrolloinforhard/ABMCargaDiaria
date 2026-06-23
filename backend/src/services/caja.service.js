@@ -71,7 +71,7 @@ function calcularResumenCaja(movimientos, fecha = null) {
       },
     },
     meta: {
-      source: "mock",
+      source: "json",
       totalMovimientosProcesados: movimientos.length,
     },
   };

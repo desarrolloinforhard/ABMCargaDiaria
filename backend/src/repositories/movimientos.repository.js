@@ -56,6 +56,22 @@ function crearMovimiento(input) {
   return movimiento;
 }
 
+function obtenerPorId(id) {
+  ensureInitialized();
+  return movimientos.find((m) => m.id === Number(id)) || null;
+}
+
+function actualizarEstado(id, estado) {
+  ensureInitialized();
+  const movimiento = movimientos.find((m) => m.id === Number(id));
+  if (!movimiento) return null;
+  movimiento.estado = estado;
+  movimiento.impactaEfectivo = require("../models/movimiento.model").esEfectivo(movimiento);
+  movimiento.impactoEnFlujo = require("../models/movimiento.model").impactoEnFlujo(movimiento);
+  saveMovimientosToDisk();
+  return movimiento;
+}
+
 function resetRepositoryForTests(rows = []) {
   movimientos = rows;
   nextId = calcularSiguienteId(rows);
@@ -65,6 +81,8 @@ function resetRepositoryForTests(rows = []) {
 
 module.exports = {
   listarMovimientos,
+  obtenerPorId,
   crearMovimiento,
+  actualizarEstado,
   resetRepositoryForTests,
 };
