@@ -29,12 +29,29 @@ class ApiClient:
         self.config = config or ApiClientConfig()
         logger.debug("ApiClient inicializado base_url=%s timeout=%s", self.config.base_url, self.config.timeout)
 
-    def listar_movimientos(self, fecha: str | None = None) -> dict[str, Any]:
-        query = f"?{urlencode({'fecha': fecha})}" if fecha else ""
+    def listar_movimientos(
+        self,
+        fecha: str | None = None,
+        fecha_desde: str | None = None,
+        fecha_hasta: str | None = None,
+        tipo: str | None = None,
+        estado: str | None = None,
+    ) -> dict[str, Any]:
+        params = {k: v for k, v in {
+            "fecha": fecha,
+            "fechaDesde": fecha_desde,
+            "fechaHasta": fecha_hasta,
+            "tipo": tipo,
+            "estado": estado,
+        }.items() if v is not None}
+        query = f"?{urlencode(params)}" if params else ""
         return self._request("GET", f"/api/movimientos{query}")
 
     def crear_movimiento(self, movimiento: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/movimientos", movimiento)
+
+    def actualizar_estado(self, movimiento_id: int, estado: str) -> dict[str, Any]:
+        return self._request("PATCH", f"/api/movimientos/{movimiento_id}/estado", {"estado": estado})
 
     def obtener_asa9_status(self) -> dict[str, Any]:
         return self._request("GET", "/api/asa9/status")

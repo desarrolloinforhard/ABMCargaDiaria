@@ -505,6 +505,7 @@ class MovimientosView(ttk.Frame):
         self.api_client = api_client
         self.movimientos: list = []
         self.status_message = "Cargando..."
+        self._selected_id: int | None = None
         self._build_widgets()
 
     def should_prepare_for_render(self) -> bool:
@@ -517,19 +518,13 @@ class MovimientosView(ttk.Frame):
     def _cargar_datos(self, fecha_desde: str | None = None, fecha_hasta: str | None = None,
                       tipo: str | None = None, estado: str | None = None) -> None:
         try:
-            respuesta = self.api_client.listar_movimientos()
-            data = respuesta.get("data", [])
-            self.movimientos = data
-
-            if fecha_desde:
-                self.movimientos = [m for m in self.movimientos if m.get("fecha", "") >= fecha_desde]
-            if fecha_hasta:
-                self.movimientos = [m for m in self.movimientos if m.get("fecha", "") <= fecha_hasta]
-            if tipo:
-                self.movimientos = [m for m in self.movimientos if m.get("tipo") == tipo]
-            if estado:
-                self.movimientos = [m for m in self.movimientos if m.get("estado") == estado]
-
+            respuesta = self.api_client.listar_movimientos(
+                fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+                tipo=tipo,
+                estado=estado,
+            )
+            self.movimientos = respuesta.get("data", [])
             self.status_message = f"{len(self.movimientos)} movimientos."
         except ApiClientError:
             self.status_message = "API no disponible."
@@ -556,12 +551,29 @@ class MovimientosView(ttk.Frame):
             row_tag_key="semaforo",
         )
         self.tabla.pack(fill="both", expand=True, pady=(0, 8))
+        self.tabla.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
 
         footer = ttk.Frame(page)
         footer.pack(side="bottom", fill="x", pady=(8, 0))
         IHButton(footer, text="Refrescar", variant="secondary", outline=True, command=self._aplicar_filtros).pack(side="left")
         self.status_var = tk.StringVar(value="")
         ttk.Label(footer, textvariable=self.status_var).pack(side="left", padx=(12, 0))
+
+        ttk.Separator(footer, orient="vertical").pack(side="left", fill="y", padx=12)
+        self._sel_label_var = tk.StringVar(value="Sin selección")
+        ttk.Label(footer, textvariable=self._sel_label_var).pack(side="left", padx=(0, 8))
+        self._nuevo_estado_combo = IHCombobox(
+            footer, label=None,
+            values=[e.value for e in EstadoMovimiento],
+        )
+        self._nuevo_estado_combo.combobox.configure(state="disabled")
+        self._nuevo_estado_combo.surface.configure(width=120)
+        self._nuevo_estado_combo.pack(side="left", padx=(0, 6))
+        self._btn_cambiar = IHButton(
+            footer, text="Cambiar estado", variant="primary",
+            command=self._cambiar_estado_seleccionado, state="disabled",
+        )
+        self._btn_cambiar.pack(side="left")
 
     def _build_filtros(self, parent) -> None:
         bar = ttk.Frame(parent)
@@ -620,9 +632,47 @@ class MovimientosView(ttk.Frame):
         self.filtro_estado.set("(todos)")
         self._cargar_datos()
 
+    def _on_row_selected(self, _event=None) -> None:
+        selection = self.tabla.tree.selection()
+        if not selection:
+            self._selected_id = None
+            self._sel_label_var.set("Sin selección")
+            self._nuevo_estado_combo.combobox.configure(state="disabled")
+            self._btn_cambiar.configure(state="disabled")
+            return
+
+        index = self.tabla.tree.index(selection[0])
+        if index >= len(self.movimientos):
+            return
+
+        mov = self.movimientos[index]
+        self._selected_id = mov.get("id")
+        estado_actual = mov.get("estado", "")
+        self._sel_label_var.set(f"#{self._selected_id} — {estado_actual}")
+        self._nuevo_estado_combo.set(estado_actual)
+        self._nuevo_estado_combo.combobox.configure(state="readonly")
+        self._btn_cambiar.configure(state="normal")
+
+    def _cambiar_estado_seleccionado(self) -> None:
+        if self._selected_id is None:
+            return
+        nuevo_estado = self._nuevo_estado_combo.get().strip()
+        if not nuevo_estado:
+            return
+        try:
+            self.api_client.actualizar_estado(self._selected_id, nuevo_estado)
+            self._set_status(f"Estado de #{self._selected_id} actualizado a '{nuevo_estado}'.")
+            self._aplicar_filtros()
+        except ApiClientError as exc:
+            self._set_status(f"Error al cambiar estado: {exc}")
+
     def _render_tabla(self) -> None:
         filas = [movimiento_desde_api(m) for m in self.movimientos]
         self.tabla.load(movimientos_a_filas(filas))
+        self._selected_id = None
+        self._sel_label_var.set("Sin selección")
+        self._nuevo_estado_combo.combobox.configure(state="disabled")
+        self._btn_cambiar.configure(state="disabled")
 
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
