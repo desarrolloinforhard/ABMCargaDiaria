@@ -64,9 +64,19 @@ function actualizarEstado(id, estado) {
   return { data: movimiento };
 }
 
+function eliminarMovimiento(id) {
+  const eliminado = movimientosRepository.eliminarPorId(id);
+  if (!eliminado) {
+    const error = new Error("Movimiento no encontrado");
+    error.code = "NOT_FOUND";
+    throw error;
+  }
+}
+
 module.exports = {
   listarMovimientos,
   obtenerMovimiento,
   crearMovimiento,
   actualizarEstado,
+  eliminarMovimiento,
 };

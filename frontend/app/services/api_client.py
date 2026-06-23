@@ -53,6 +53,9 @@ class ApiClient:
     def actualizar_estado(self, movimiento_id: int, estado: str) -> dict[str, Any]:
         return self._request("PATCH", f"/api/movimientos/{movimiento_id}/estado", {"estado": estado})
 
+    def eliminar_movimiento(self, movimiento_id: int) -> None:
+        self._request("DELETE", f"/api/movimientos/{movimiento_id}")
+
     def obtener_asa9_status(self) -> dict[str, Any]:
         return self._request("GET", "/api/asa9/status")
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from datetime import date
 from tkinter import ttk
+import ttkbootstrap as ttkbs
 
 from app.config.settings import settings
 from app.infrastructure.logging import get_logger
@@ -251,6 +252,7 @@ class CajaDiariaView(ttk.Frame):
             rows=[],
             row_tag_key="semaforo",
         )
+        self.table.set_tag_color("grey", "#e2e8f0", "#64748b")
         self.table.pack(fill="both", expand=True, pady=8)
 
     def _build_filter_bar(self, parent) -> None:
@@ -550,6 +552,7 @@ class MovimientosView(ttk.Frame):
             rows=[],
             row_tag_key="semaforo",
         )
+        self.tabla.set_tag_color("grey", "#e2e8f0", "#64748b")
         self.tabla.pack(fill="both", expand=True, pady=(0, 8))
         self.tabla.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
 
@@ -573,7 +576,12 @@ class MovimientosView(ttk.Frame):
             footer, text="Cambiar estado", variant="primary",
             command=self._cambiar_estado_seleccionado, state="disabled",
         )
-        self._btn_cambiar.pack(side="left")
+        self._btn_cambiar.pack(side="left", padx=(0, 6))
+        self._btn_eliminar = IHButton(
+            footer, text="Eliminar", variant="danger",
+            command=self._eliminar_seleccionado, state="disabled",
+        )
+        self._btn_eliminar.pack(side="left")
 
     def _build_filtros(self, parent) -> None:
         bar = ttk.Frame(parent)
@@ -639,6 +647,7 @@ class MovimientosView(ttk.Frame):
             self._sel_label_var.set("Sin selección")
             self._nuevo_estado_combo.combobox.configure(state="disabled")
             self._btn_cambiar.configure(state="disabled")
+            self._btn_eliminar.configure(state="disabled")
             return
 
         index = self.tabla.tree.index(selection[0])
@@ -652,6 +661,7 @@ class MovimientosView(ttk.Frame):
         self._nuevo_estado_combo.set(estado_actual)
         self._nuevo_estado_combo.combobox.configure(state="readonly")
         self._btn_cambiar.configure(state="normal")
+        self._btn_eliminar.configure(state="normal")
 
     def _cambiar_estado_seleccionado(self) -> None:
         if self._selected_id is None:
@@ -662,7 +672,7 @@ class MovimientosView(ttk.Frame):
         try:
             self.api_client.actualizar_estado(self._selected_id, nuevo_estado)
             self._set_status(f"Estado de #{self._selected_id} actualizado a '{nuevo_estado}'.")
-            self._aplicar_filtros()
+            self._cargar_datos()
         except ApiClientError as exc:
             self._set_status(f"Error al cambiar estado: {exc}")
 
@@ -673,9 +683,63 @@ class MovimientosView(ttk.Frame):
         self._sel_label_var.set("Sin selección")
         self._nuevo_estado_combo.combobox.configure(state="disabled")
         self._btn_cambiar.configure(state="disabled")
+        self._btn_eliminar.configure(state="disabled")
+
+    def _eliminar_seleccionado(self) -> None:
+        if self._selected_id is None:
+            return
+        dialogo = _ConfirmDialog(
+            self.winfo_toplevel(),
+            title="Eliminar movimiento",
+            message=f"¿Estás seguro de que querés eliminar el movimiento #{self._selected_id}? Esta acción no se puede deshacer.",
+            confirm_text="Eliminar",
+            confirm_variant="danger",
+        )
+        if not dialogo.confirmed:
+            return
+        try:
+            self.api_client.eliminar_movimiento(self._selected_id)
+            self._set_status(f"Movimiento #{self._selected_id} eliminado.")
+            self._cargar_datos()
+        except ApiClientError as exc:
+            self._set_status(f"Error al eliminar: {exc}")
 
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
+
+
+class _ConfirmDialog(tk.Toplevel):
+    """Modal de confirmación genérico con botones Confirmar y Cancelar."""
+
+    def __init__(self, master, title: str, message: str, confirm_text: str = "Confirmar", confirm_variant: str = "danger"):
+        super().__init__(master)
+        self.confirmed = False
+        self.title(title)
+        self.resizable(False, False)
+        self.grab_set()
+        self.transient(master)
+
+        outer = ttk.Frame(self, padding=24)
+        outer.pack(fill="both", expand=True)
+
+        ttk.Label(outer, text=title, font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 8))
+        ttk.Label(outer, text=message, wraplength=320).pack(anchor="w", pady=(0, 20))
+
+        btn_row = ttk.Frame(outer)
+        btn_row.pack(anchor="e")
+        ttkbs.Button(btn_row, text="Cancelar", bootstyle="secondary", padding=(16, 8), command=self.destroy).pack(side="left", padx=(0, 8))
+        ttkbs.Button(btn_row, text=confirm_text, bootstyle="danger", padding=(16, 8), command=self._confirm).pack(side="left")
+
+        self.update_idletasks()
+        pw = master.winfo_rootx() + master.winfo_width() // 2
+        ph = master.winfo_rooty() + master.winfo_height() // 2
+        w, h = self.winfo_width(), self.winfo_height()
+        self.geometry(f"+{pw - w // 2}+{ph - h // 2}")
+        self.wait_window()
+
+    def _confirm(self) -> None:
+        self.confirmed = True
+        self.destroy()
 
 
 class PlaceholderView(ttk.Frame):

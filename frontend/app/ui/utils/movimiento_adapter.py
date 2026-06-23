@@ -79,7 +79,7 @@ def calcular_metricas(movimientos: list[Movimiento]) -> dict:
 
 def _fila_tag(m: Movimiento) -> str:
     if m.estado == EstadoMovimiento.ANULADO:
-        return ""
+        return "grey"
     if m.estado == EstadoMovimiento.PENDIENTE:
         return "yellow"
     if m.tipo == TipoMovimiento.INGRESO:

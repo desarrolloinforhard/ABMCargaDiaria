@@ -64,4 +64,16 @@ router.patch("/:id/estado", (req, res) => {
   }
 });
 
+router.delete("/:id", (req, res) => {
+  try {
+    movimientosService.eliminarMovimiento(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    if (error.code === "NOT_FOUND") {
+      return res.status(404).json({ error: { code: error.code, message: error.message, details: [] } });
+    }
+    res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Error interno.", details: [] } });
+  }
+});
+
 module.exports = router;

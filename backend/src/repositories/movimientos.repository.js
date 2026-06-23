@@ -72,6 +72,15 @@ function actualizarEstado(id, estado) {
   return movimiento;
 }
 
+function eliminarPorId(id) {
+  ensureInitialized();
+  const index = movimientos.findIndex((m) => m.id === Number(id));
+  if (index === -1) return false;
+  movimientos.splice(index, 1);
+  saveMovimientosToDisk();
+  return true;
+}
+
 function resetRepositoryForTests(rows = []) {
   movimientos = rows;
   nextId = calcularSiguienteId(rows);
@@ -84,5 +93,6 @@ module.exports = {
   obtenerPorId,
   crearMovimiento,
   actualizarEstado,
+  eliminarPorId,
   resetRepositoryForTests,
 };
