@@ -29,7 +29,7 @@ from app.config.tkinforhard import (
 from ttkbootstrap.widgets import DateEntry
 
 from app.models import EstadoMovimiento, Movimiento, OrigenMovimiento, TipoMovimiento
-from app.ui.mocks import MOVIMIENTOS_MOCK
+from app.ui.mocks import MOVIMIENTOS_MOCK, VENTAS_FACTURAS_MOCK, VENTAS_REMITOS_MOCK
 from app.services.api_client import ApiClient, ApiClientError
 
 logger = get_logger("ui.main_window")
@@ -66,6 +66,7 @@ class MainWindow:
         self.drawer = IHDrawerMenu(shell, title=settings.app_name, side="left", width=230)
         self.drawer.add_item("Caja Diaria", command=self._show_caja_diaria, active=True)
         self.drawer.add_item("Movimientos", command=self._show_movimientos)
+        self.drawer.add_item("Ventas", command=self._show_ventas)
         self.drawer.add_item("Cuenta Corriente", command=lambda: self._show_placeholder_view("Cuenta Corriente"))
         self.drawer.add_item("Rendiciones", command=lambda: self._show_placeholder_view("Rendiciones"))
         self.drawer.add_item("Banco", command=lambda: self._show_placeholder_view("Banco"))
@@ -129,6 +130,17 @@ class MainWindow:
         )
         self._close_drawer_if_open()
 
+    def _show_ventas(self) -> None:
+        self.current_view_key = "ventas"
+        logger.info("RenderHost show view=ventas")
+        self.topbar.set_title("Ventas")
+        self._topbar_subtitle_var.set("")
+        self.render_host.show(
+            lambda master: VentasView(master, self.api_client),
+            cache_key="ventas",
+        )
+        self._close_drawer_if_open()
+
     def _show_placeholder_view(self, title: str) -> None:
         key = f"placeholder:{title}"
         self.current_view_key = key
@@ -181,6 +193,112 @@ class MainWindow:
         toggle = getattr(self.root, "toggle_theme", None)
         if callable(toggle):
             toggle()
+
+
+def _fix_combobox_popup(ih_combo) -> None:
+    """Aplica color IH al campo de entrada y al listbox del dropdown.
+
+    Dos partes:
+    1. Campo de entrada (foreground del widget): se fija al mapear el widget y en cada
+       cambio de tema, porque ttkbootstrap puede resetearlo al mostrar el widget.
+    2. Listbox del dropdown: ConfigureListbox (Tcl) resetea el fondo en CADA apertura,
+       así que se corrige via after(0) desde ButtonPress (corre tras ConfigureListbox,
+       antes del render) y via <Map> del popup como respaldo.
+    """
+    cb = ih_combo.combobox
+
+    def _fg():
+        return ttk.Style().lookup("IH.TLabel", "foreground") or "#ffffff"
+
+    def _bg():
+        return ttk.Style().lookup("IH.TFrame", "background") or "#000000"
+
+    def _fix_entry(_event=None):
+        try:
+            bg, fg = _bg(), _fg()
+            # fieldbackground en TCombobox se controla SOLO via style map, no via configure.
+            # ttkbootstrap lo hardcodea en [('readonly', '#555555')], hay que pisarlo.
+            ttk.Style().map("TCombobox",
+                            fieldbackground=[("readonly", bg), ("focus", bg), ("", bg)])
+        except Exception:
+            pass
+        try:
+            cb.configure(foreground=_fg())
+        except Exception:
+            pass
+
+    # Fijar texto y fondo del campo: al mostrarse por primera vez y en cada cambio de tema
+    _fix_entry()
+    cb.bind("<Map>", _fix_entry, add="+")
+    ih_combo.bind("<<IHThemeChanged>>", _fix_entry, add="+")
+
+    # --- Fix del popup dropdown ---
+    try:
+        pd = cb.tk.eval(f"ttk::combobox::PopdownWindow {cb}")
+    except Exception:
+        return
+
+    def _apply(_event=None):
+        try:
+            bg, fg = _bg(), _fg()
+            cb.tk.call(f"{pd}.f.l", "configure",
+                       "-background", bg, "-foreground", fg,
+                       "-selectbackground", bg, "-selectforeground", fg)
+            cb.configure(foreground=fg)
+        except Exception:
+            pass
+
+    def _schedule(_event=None):
+        cb.after(0, _apply)
+
+    _apply()
+    try:
+        popup = cb.nametowidget(pd)
+        popup.bind("<Map>", _apply, add="+")
+    except Exception:
+        try:
+            cmd = cb.tk.register(_apply)
+            cb.tk.call("bind", pd, "<Map>", f"+{cmd}")
+        except Exception:
+            pass
+    cb.bind("<ButtonPress-1>", _schedule, add="+")
+    cb.bind("<Down>", _schedule, add="+")
+
+
+def _fix_dateentry_theme(date_entry) -> None:
+    """Fuerza al botón de DateEntry a regenerar su estilo (imagen de calendario)
+    cada vez que el tema IH cambia. ttkbootstrap crea el estilo 'Date.TButton'
+    on-demand en el builder actual; si el tema es nuevo ese estilo no existe aún
+    y el ícono desaparece. Reconfigurando el botón forzamos su creación."""
+    def _reconfigure(_event=None):
+        try:
+            date_entry.button.configure(bootstyle=[date_entry._bootstyle, "date"])
+        except Exception:
+            pass
+    date_entry.bind("<<IHThemeChanged>>", _reconfigure, add="+")
+
+
+_TABLE_TAGS_DARK = {
+    "green":  ("#071a0f", "#ffffff"),
+    "red":    ("#1a0707", "#ffffff"),
+    "yellow": ("#1a1507", "#ffffff"),
+    "grey":   ("#141414", "#9ca3af"),
+}
+_TABLE_TAGS_LIGHT = {
+    "green":  ("#dcfce7", "#166534"),
+    "red":    ("#fee2e2", "#991b1b"),
+    "yellow": ("#fef9c3", "#854d0e"),
+    "grey":   ("#e2e8f0", "#64748b"),
+}
+
+
+def _apply_table_tags(table, tags=("green", "red", "yellow", "grey")) -> None:
+    """Aplica los colores de tag correctos según el tema activo (oscuro o claro)."""
+    is_dark = ttk.Style().lookup("IH.TFrame", "background") == "#000000"
+    palette = _TABLE_TAGS_DARK if is_dark else _TABLE_TAGS_LIGHT
+    for tag in tags:
+        if tag in palette:
+            table.set_tag_color(tag, *palette[tag])
 
 
 class CajaDiariaView(ttk.Frame):
@@ -236,15 +354,21 @@ class CajaDiariaView(ttk.Frame):
         self._build_filter_bar(page)
 
         self.metrics_host = ttk.Frame(page)
-        self.metrics_host.pack(fill="x", pady=(0, 18))
+        self.metrics_host.pack(fill="x", pady=(0, 12))
+
+        self._action_bar = ttk.Frame(page, style="IH.TFrame")
+        self._action_bar.pack(fill="x", pady=(0, 6))
+        self._btn_nuevo = IHButton(self._action_bar, text="Nuevo Movimiento", variant="primary", command=self._mostrar_form)
+        self._btn_nuevo.pack(side="right")
+        ttk.Label(self._action_bar, text="Movimientos del día", font=("Segoe UI", 11, "bold"), style="IH.TLabel").pack(side="left", fill="x", expand=True)
 
         self._build_manual_form(page)
 
-        footer = ttk.Frame(page)
+        footer = ttk.Frame(page, style="IH.TFrame")
         footer.pack(side="bottom", fill="x", pady=(8, 0))
         IHButton(footer, text="Refrescar", variant="secondary", outline=True, command=self.on_reload).pack(side="left")
         self.status_var = tk.StringVar(value="API pendiente de consulta.")
-        ttk.Label(footer, textvariable=self.status_var).pack(side="left", padx=(12, 0))
+        ttk.Label(footer, textvariable=self.status_var, style="IH.TLabel").pack(side="left", padx=(12, 0))
 
         self.table = IHTable(
             page,
@@ -252,20 +376,22 @@ class CajaDiariaView(ttk.Frame):
             rows=[],
             row_tag_key="semaforo",
         )
-        self.table.set_tag_color("grey", "#e2e8f0", "#64748b")
+        _apply_table_tags(self.table)
+        self.table.bind("<<IHThemeChanged>>", lambda _: _apply_table_tags(self.table), add="+")
         self.table.pack(fill="both", expand=True, pady=8)
 
     def _build_filter_bar(self, parent) -> None:
-        bar = ttk.Frame(parent)
+        bar = ttk.Frame(parent, style="IH.TFrame")
         bar.pack(fill="x", pady=(0, 12))
         IHButton(bar, text="Limpiar", variant="secondary", outline=True, command=self._limpiar_filtro).pack(side="right")
         IHButton(bar, text="Filtrar", variant="primary", command=self._aplicar_filtro).pack(side="right", padx=(0, 6))
-        ttk.Label(bar, text="Filtrar por fecha:").pack(side="left", padx=(0, 8))
+        ttk.Label(bar, text="Filtrar por fecha:", style="IH.TLabel").pack(side="left", padx=(0, 8))
         self.filtro_fecha_input = DateEntry(
             bar, dateformat="%Y-%m-%d", firstweekday=0,
             startdate=date.today(), bootstyle="success", width=12,
         )
         self.filtro_fecha_input.pack(side="left")
+        _fix_dateentry_theme(self.filtro_fecha_input)
 
     def _aplicar_filtro(self) -> None:
         fecha = self.filtro_fecha_input.entry.get().strip()
@@ -280,20 +406,34 @@ class CajaDiariaView(ttk.Frame):
         self.filtro_fecha_input.entry.delete(0, "end")
         self._cargar_datos(None)
 
+    def _mostrar_form(self) -> None:
+        self._form_frame.pack(after=self._action_bar, fill="x", pady=(0, 10))
+
+    def _ocultar_form(self) -> None:
+        self._form_frame.pack_forget()
+
     def _build_manual_form(self, parent) -> None:
-        form = ttk.LabelFrame(parent, text="Carga manual de movimiento", padding=12)
-        form.pack(fill="x", pady=(0, 10))
+        self._form_frame = ttk.Frame(parent, style="IH.TFrame")
+
+        _header = ttk.Frame(self._form_frame, style="IH.TFrame")
+        _header.pack(fill="x", pady=(6, 2))
+        ttk.Label(_header, text="Carga manual de movimiento", style="IH.Muted.TLabel").pack(side="left")
+        ttk.Separator(self._form_frame).pack(fill="x", pady=(0, 8))
+
+        _fc = ttk.Frame(self._form_frame, style="IH.TFrame", padding=(0, 0, 0, 8))
+        _fc.pack(fill="x")
         for column in range(6):
-            form.columnconfigure(column, weight=1)
+            _fc.columnconfigure(column, weight=1)
 
         self.fecha_input = DateEntry(
-            form, dateformat="%Y-%m-%d", firstweekday=0,
+            _fc, dateformat="%Y-%m-%d", firstweekday=0,
             startdate=date.today(), bootstyle="success", width=12,
         )
-        self.fecha_input.grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
+        self.fecha_input.grid(row=0, column=0, sticky="sew", padx=(0, 8), pady=(0, 8))
+        _fix_dateentry_theme(self.fecha_input)
 
         self.tipo_input = IHCombobox(
-            form,
+            _fc,
             label="Tipo",
             values=[tipo.value for tipo in TipoMovimiento],
             state="readonly",
@@ -303,7 +443,7 @@ class CajaDiariaView(ttk.Frame):
         self.tipo_input.surface.bind("<<ComboboxSelected>>", self._on_tipo_changed)
 
         self.estado_input = IHCombobox(
-            form,
+            _fc,
             label="Estado",
             values=[estado.value for estado in EstadoMovimiento],
             state="readonly",
@@ -311,30 +451,33 @@ class CajaDiariaView(ttk.Frame):
         self.estado_input.grid(row=0, column=2, sticky="ew", padx=8, pady=(0, 8))
         self.estado_input.set(EstadoMovimiento.PENDIENTE.value)
 
-        self.monto_input = IHInput(form, label="Monto", placeholder="0.00")
+        self.monto_input = IHInput(_fc, label="Monto", placeholder="0.00")
         self.monto_input.grid(row=0, column=3, sticky="ew", padx=8, pady=(0, 8))
         self.monto_input.entry.bind("<FocusOut>", self._format_monto, add="+")
         self.monto_input.entry.bind("<FocusIn>", self._unformat_monto, add="+")
         self.monto_input.entry.bind("<FocusIn>", lambda e: self.monto_input.clear_error(), add="+")
         self.monto_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
 
-        self.descripcion_input = IHInput(form, label="Descripcion", placeholder="Detalle del movimiento")
+        self.descripcion_input = IHInput(_fc, label="Descripcion", placeholder="Detalle del movimiento")
         self.descripcion_input.grid(row=0, column=4, sticky="ew", padx=8, pady=(0, 8))
         self.descripcion_input.entry.bind("<FocusIn>", lambda e: self.descripcion_input.clear_error(), add="+")
         self.descripcion_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
 
-        actions = ttk.Frame(form)
+        actions = ttk.Frame(_fc, style="IH.TFrame")
         actions.grid(row=0, column=5, sticky="sew", padx=(8, 0), pady=(18, 8))
         IHButton(actions, text="Guardar", variant="success", command=self._crear_movimiento_manual).pack(side="left")
+        IHButton(actions, text="Ocultar", variant="secondary", outline=True, command=self._ocultar_form).pack(side="left", padx=(6, 0))
 
-        self.empleado_input = IHInput(form, label="Empleado ID", placeholder="ID del empleado")
+        self.empleado_input = IHInput(_fc, label="Empleado ID", placeholder="ID del empleado")
         self.empleado_input.entry.bind("<FocusIn>", lambda e: self.empleado_input.clear_error(), add="+")
         self.empleado_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
-        self.rendicion_input = IHInput(form, label="Rendición ID", placeholder="ID de rendición")
+        self.rendicion_input = IHInput(_fc, label="Rendición ID", placeholder="ID de rendición")
         self.rendicion_input.entry.bind("<FocusIn>", lambda e: self.rendicion_input.clear_error(), add="+")
         self.rendicion_input.entry.bind("<Return>", lambda e: self._crear_movimiento_manual(), add="+")
         self._cuenta_corriente_var = tk.BooleanVar(value=False)
-        self._cc_check = ttk.Checkbutton(form, text="Cuenta Corriente", variable=self._cuenta_corriente_var)
+        self._cc_check = ttk.Checkbutton(_fc, text="Cuenta Corriente", variable=self._cuenta_corriente_var)
+        _fix_combobox_popup(self.tipo_input)
+        _fix_combobox_popup(self.estado_input)
 
     def _on_tipo_changed(self, event=None) -> None:
         tipo = self.tipo_input.get().strip()
@@ -552,19 +695,20 @@ class MovimientosView(ttk.Frame):
             rows=[],
             row_tag_key="semaforo",
         )
-        self.tabla.set_tag_color("grey", "#e2e8f0", "#64748b")
+        _apply_table_tags(self.tabla)
+        self.tabla.bind("<<IHThemeChanged>>", lambda _: _apply_table_tags(self.tabla), add="+")
         self.tabla.pack(fill="both", expand=True, pady=(0, 8))
         self.tabla.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
 
-        footer = ttk.Frame(page)
+        footer = ttk.Frame(page, style="IH.TFrame")
         footer.pack(side="bottom", fill="x", pady=(8, 0))
         IHButton(footer, text="Refrescar", variant="secondary", outline=True, command=self._aplicar_filtros).pack(side="left")
         self.status_var = tk.StringVar(value="")
-        ttk.Label(footer, textvariable=self.status_var).pack(side="left", padx=(12, 0))
+        ttk.Label(footer, textvariable=self.status_var, style="IH.TLabel").pack(side="left", padx=(12, 0))
 
         ttk.Separator(footer, orient="vertical").pack(side="left", fill="y", padx=12)
         self._sel_label_var = tk.StringVar(value="Sin selección")
-        ttk.Label(footer, textvariable=self._sel_label_var).pack(side="left", padx=(0, 8))
+        ttk.Label(footer, textvariable=self._sel_label_var, style="IH.TLabel").pack(side="left", padx=(0, 8))
         self._nuevo_estado_combo = IHCombobox(
             footer, label=None,
             values=[e.value for e in EstadoMovimiento],
@@ -582,6 +726,7 @@ class MovimientosView(ttk.Frame):
             command=self._eliminar_seleccionado, state="disabled",
         )
         self._btn_eliminar.pack(side="left")
+        _fix_combobox_popup(self._nuevo_estado_combo)
 
     def _build_filtros(self, parent) -> None:
         bar = ttk.Frame(parent)
@@ -593,6 +738,7 @@ class MovimientosView(ttk.Frame):
             startdate=date.today(), bootstyle="primary", width=12,
         )
         self.filtro_desde.pack(side="left", padx=(0, 12))
+        _fix_dateentry_theme(self.filtro_desde)
 
         ttk.Label(bar, text="Hasta:").pack(side="left", padx=(0, 4))
         self.filtro_hasta = DateEntry(
@@ -600,6 +746,7 @@ class MovimientosView(ttk.Frame):
             startdate=date.today(), bootstyle="primary", width=12,
         )
         self.filtro_hasta.pack(side="left", padx=(0, 12))
+        _fix_dateentry_theme(self.filtro_hasta)
 
         ttk.Label(bar, text="Tipo:").pack(side="left", padx=(0, 4))
         self.filtro_tipo = IHCombobox(
@@ -623,6 +770,8 @@ class MovimientosView(ttk.Frame):
 
         IHButton(bar, text="Limpiar", variant="secondary", outline=True, command=self._limpiar_filtros).pack(side="right")
         IHButton(bar, text="Filtrar", variant="primary", command=self._aplicar_filtros).pack(side="right", padx=(0, 6))
+        _fix_combobox_popup(self.filtro_tipo)
+        _fix_combobox_popup(self.filtro_estado)
 
     def _aplicar_filtros(self) -> None:
         desde = self.filtro_desde.entry.get().strip() or None
@@ -740,6 +889,161 @@ class _ConfirmDialog(tk.Toplevel):
     def _confirm(self) -> None:
         self.confirmed = True
         self.destroy()
+
+
+_ESTADOS_FACTURA = ["(todos)", "pendiente", "pagada", "anulada"]
+_ESTADOS_REMITO = ["(todos)", "pendiente_facturar", "entregado", "anulado"]
+_TAG_VENTAS: dict[str, str] = {
+    "pagada": "green",
+    "entregado": "green",
+    "anulada": "grey",
+    "anulado": "grey",
+}
+
+
+class VentasView(ttk.Frame):
+    """Vista de ventas con tabs de Facturas y Remitos."""
+
+    def __init__(self, master, api_client: ApiClient) -> None:
+        super().__init__(master)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        page = IHPage(self, padding=24)
+        page.grid(row=0, column=0, sticky="nsew")
+        page.columnconfigure(0, weight=1)
+
+        IHSectionHeader(page, title="Ventas", subtitle="Facturas y remitos provenientes de ASA9.").pack(fill="x", pady=(0, 12))
+
+        notebook = ttk.Notebook(page)
+        notebook.pack(fill="both", expand=True)
+
+        self._facturas_tab = _VentasTabFrame(notebook, api_client, "facturas")
+        self._remitos_tab = _VentasTabFrame(notebook, api_client, "remitos")
+        notebook.add(self._facturas_tab, text="  Facturas  ")
+        notebook.add(self._remitos_tab, text="  Remitos  ")
+
+    def should_prepare_for_render(self) -> bool:
+        return True
+
+    def prepare_for_render(self, on_done, on_error=None) -> None:
+        self._facturas_tab._cargar_datos()
+        self._remitos_tab._cargar_datos()
+        on_done()
+
+
+class _VentasTabFrame(ttk.Frame):
+    """Tab generico para Facturas o Remitos dentro de VentasView."""
+
+    def __init__(self, master, api_client: ApiClient, tipo: str) -> None:
+        super().__init__(master, padding=(12, 8))
+        self.api_client = api_client
+        self.tipo = tipo
+        self._filas: list[dict] = []
+        self._build_widgets()
+
+    def _build_widgets(self) -> None:
+        self._build_filtros()
+
+        footer = ttk.Frame(self, style="IH.TFrame")
+        footer.pack(side="bottom", fill="x", pady=(8, 0))
+        IHButton(footer, text="Refrescar", variant="secondary", outline=True, command=self._aplicar_filtros).pack(side="left")
+        self.status_var = tk.StringVar(value="")
+        ttk.Label(footer, textvariable=self.status_var, style="IH.TLabel").pack(side="left", padx=(12, 0))
+
+        self.tabla = IHTable(
+            self,
+            columns=("Fecha", "Cliente", "Comprobante", "Total", "Estado", "Origen"),
+            rows=[],
+            row_tag_key="semaforo",
+        )
+        _apply_table_tags(self.tabla, tags=("green", "grey"))
+        self.tabla.bind("<<IHThemeChanged>>", lambda _: _apply_table_tags(self.tabla, tags=("green", "grey")), add="+")
+        self.tabla.pack(fill="both", expand=True, pady=(8, 0))
+
+    def _build_filtros(self) -> None:
+        bar = ttk.Frame(self)
+        bar.pack(fill="x", pady=(0, 4))
+
+        ttk.Label(bar, text="Desde:").pack(side="left", padx=(0, 4))
+        self.filtro_desde = DateEntry(
+            bar, dateformat="%Y-%m-%d", firstweekday=0,
+            startdate=date.today(), bootstyle="primary", width=12,
+        )
+        self.filtro_desde.pack(side="left", padx=(0, 12))
+        _fix_dateentry_theme(self.filtro_desde)
+
+        ttk.Label(bar, text="Hasta:").pack(side="left", padx=(0, 4))
+        self.filtro_hasta = DateEntry(
+            bar, dateformat="%Y-%m-%d", firstweekday=0,
+            startdate=date.today(), bootstyle="primary", width=12,
+        )
+        self.filtro_hasta.pack(side="left", padx=(0, 12))
+        _fix_dateentry_theme(self.filtro_hasta)
+
+        ttk.Label(bar, text="Estado:").pack(side="left", padx=(0, 4))
+        estados = _ESTADOS_FACTURA if self.tipo == "facturas" else _ESTADOS_REMITO
+        self.filtro_estado = IHCombobox(bar, label=None, values=estados, state="readonly")
+        self.filtro_estado.surface.configure(width=150)
+        self.filtro_estado.pack(side="left", padx=(0, 12))
+        self.filtro_estado.set(estados[0])
+
+        IHButton(bar, text="Limpiar", variant="secondary", outline=True, command=self._limpiar_filtros).pack(side="right")
+        IHButton(bar, text="Filtrar", variant="primary", command=self._aplicar_filtros).pack(side="right", padx=(0, 6))
+        _fix_combobox_popup(self.filtro_estado)
+
+    def _cargar_datos(
+        self,
+        fecha_desde: str | None = None,
+        fecha_hasta: str | None = None,
+        estado: str | None = None,
+    ) -> None:
+        try:
+            if self.tipo == "facturas":
+                respuesta = self.api_client.listar_facturas(fecha_desde, fecha_hasta, estado)
+            else:
+                respuesta = self.api_client.listar_remitos(fecha_desde, fecha_hasta, estado)
+            self._filas = respuesta.get("data", [])
+            self.status_var.set(f"{len(self._filas)} registros.")
+        except ApiClientError:
+            mocks = VENTAS_FACTURAS_MOCK if self.tipo == "facturas" else VENTAS_REMITOS_MOCK
+            self._filas = list(mocks)
+            self.status_var.set(f"API no disponible. Mostrando {len(self._filas)} registros de prueba.")
+        self._render_tabla()
+
+    def _aplicar_filtros(self) -> None:
+        desde = self.filtro_desde.entry.get().strip() or None
+        hasta = self.filtro_hasta.entry.get().strip() or None
+        estado_val = self.filtro_estado.get().strip()
+        estado = None if estado_val == "(todos)" else estado_val
+        self._cargar_datos(desde, hasta, estado)
+
+    def _limpiar_filtros(self) -> None:
+        self.filtro_desde.entry.delete(0, "end")
+        self.filtro_hasta.entry.delete(0, "end")
+        estados = _ESTADOS_FACTURA if self.tipo == "facturas" else _ESTADOS_REMITO
+        self.filtro_estado.set(estados[0])
+        self._cargar_datos()
+
+    def _render_tabla(self) -> None:
+        filas = []
+        for item in self._filas:
+            estado = item.get("estado", "")
+            total = item.get("total", "0")
+            try:
+                total_fmt = f"$ {float(total):,.2f}"
+            except (TypeError, ValueError):
+                total_fmt = str(total)
+            filas.append({
+                "Fecha": item.get("fecha", ""),
+                "Cliente": item.get("cliente", ""),
+                "Comprobante": item.get("comprobante", ""),
+                "Total": total_fmt,
+                "Estado": estado.replace("_", " ").capitalize(),
+                "Origen": item.get("origen", "").upper(),
+                "semaforo": _TAG_VENTAS.get(estado, ""),
+            })
+        self.tabla.load(filas)
 
 
 class PlaceholderView(ttk.Frame):

@@ -56,6 +56,34 @@ class ApiClient:
     def eliminar_movimiento(self, movimiento_id: int) -> None:
         self._request("DELETE", f"/api/movimientos/{movimiento_id}")
 
+    def listar_facturas(
+        self,
+        fecha_desde: str | None = None,
+        fecha_hasta: str | None = None,
+        estado: str | None = None,
+    ) -> dict[str, Any]:
+        params = {k: v for k, v in {
+            "fechaDesde": fecha_desde,
+            "fechaHasta": fecha_hasta,
+            "estado": estado,
+        }.items() if v is not None}
+        query = f"?{urlencode(params)}" if params else ""
+        return self._request("GET", f"/api/ventas/facturas{query}")
+
+    def listar_remitos(
+        self,
+        fecha_desde: str | None = None,
+        fecha_hasta: str | None = None,
+        estado: str | None = None,
+    ) -> dict[str, Any]:
+        params = {k: v for k, v in {
+            "fechaDesde": fecha_desde,
+            "fechaHasta": fecha_hasta,
+            "estado": estado,
+        }.items() if v is not None}
+        query = f"?{urlencode(params)}" if params else ""
+        return self._request("GET", f"/api/ventas/remitos{query}")
+
     def obtener_asa9_status(self) -> dict[str, Any]:
         return self._request("GET", "/api/asa9/status")
 
