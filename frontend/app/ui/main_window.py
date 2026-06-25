@@ -278,6 +278,19 @@ def _fix_dateentry_theme(date_entry) -> None:
     date_entry.bind("<<IHThemeChanged>>", _reconfigure, add="+")
 
 
+def _fix_treeview_border(tree) -> None:
+    """Anula el borde gris/celeste que ttkbootstrap aplica al Treeview en foco."""
+    try:
+        s = ttk.Style()
+        s.map("IH.Treeview",
+              bordercolor=[("focus", "#000000"), ("!focus", "#000000"), ("", "#000000")],
+              lightcolor=[("focus", "#000000"), ("", "#000000")],
+              darkcolor=[("focus", "#000000"), ("", "#000000")])
+        s.configure("IH.Treeview", borderwidth=0, relief="flat")
+    except Exception:
+        pass
+
+
 _TABLE_TAGS_DARK = {
     "green":  ("#071a0f", "#ffffff"),
     "red":    ("#1a0707", "#ffffff"),
@@ -685,19 +698,25 @@ class MovimientosView(ttk.Frame):
         page.grid(row=0, column=0, sticky="nsew")
         page.columnconfigure(0, weight=1)
 
-        IHSectionHeader(page, title="Movimientos", subtitle="Listado completo de movimientos registrados.").pack(fill="x", pady=(0, 16))
-
         self._build_filtros(page)
 
+        tabla_border = tk.Frame(page, highlightthickness=2, highlightbackground="#22c55e", highlightcolor="#22c55e", bd=0, background="#000000")
+        tabla_border.pack(fill="both", expand=True, pady=(0, 8))
         self.tabla = IHTable(
-            page,
+            tabla_border,
             columns=("Fecha", "Tipo", "Origen", "Estado", "Monto", "Descripcion"),
             rows=[],
             row_tag_key="semaforo",
         )
         _apply_table_tags(self.tabla)
         self.tabla.bind("<<IHThemeChanged>>", lambda _: _apply_table_tags(self.tabla), add="+")
-        self.tabla.pack(fill="both", expand=True, pady=(0, 8))
+        self.tabla.pack(fill="both", expand=True)
+        self.tabla._border.configure(bg="#000000", highlightthickness=0)
+        _fix_treeview_border(self.tabla.tree)
+        self.tabla.bind("<<IHThemeChanged>>", lambda _: (
+            self.tabla._border.configure(bg="#000000", highlightthickness=0),
+            _fix_treeview_border(self.tabla.tree),
+        ), add="+")
         self.tabla.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
 
         footer = ttk.Frame(page, style="IH.TFrame")
@@ -729,10 +748,10 @@ class MovimientosView(ttk.Frame):
         _fix_combobox_popup(self._nuevo_estado_combo)
 
     def _build_filtros(self, parent) -> None:
-        bar = ttk.Frame(parent)
+        bar = ttk.Frame(parent, style="IH.TFrame")
         bar.pack(fill="x", pady=(0, 12))
 
-        ttk.Label(bar, text="Desde:").pack(side="left", padx=(0, 4))
+        ttk.Label(bar, text="Desde:", style="IH.TLabel").pack(side="left", padx=(0, 4))
         self.filtro_desde = DateEntry(
             bar, dateformat="%Y-%m-%d", firstweekday=0,
             startdate=date.today(), bootstyle="primary", width=12,
@@ -740,7 +759,7 @@ class MovimientosView(ttk.Frame):
         self.filtro_desde.pack(side="left", padx=(0, 12))
         _fix_dateentry_theme(self.filtro_desde)
 
-        ttk.Label(bar, text="Hasta:").pack(side="left", padx=(0, 4))
+        ttk.Label(bar, text="Hasta:", style="IH.TLabel").pack(side="left", padx=(0, 4))
         self.filtro_hasta = DateEntry(
             bar, dateformat="%Y-%m-%d", firstweekday=0,
             startdate=date.today(), bootstyle="primary", width=12,
@@ -748,7 +767,7 @@ class MovimientosView(ttk.Frame):
         self.filtro_hasta.pack(side="left", padx=(0, 12))
         _fix_dateentry_theme(self.filtro_hasta)
 
-        ttk.Label(bar, text="Tipo:").pack(side="left", padx=(0, 4))
+        ttk.Label(bar, text="Tipo:", style="IH.TLabel").pack(side="left", padx=(0, 4))
         self.filtro_tipo = IHCombobox(
             bar, label=None,
             values=["(todos)"] + [t.value for t in TipoMovimiento],
@@ -758,7 +777,7 @@ class MovimientosView(ttk.Frame):
         self.filtro_tipo.pack(side="left", padx=(0, 12))
         self.filtro_tipo.set("(todos)")
 
-        ttk.Label(bar, text="Estado:").pack(side="left", padx=(0, 4))
+        ttk.Label(bar, text="Estado:", style="IH.TLabel").pack(side="left", padx=(0, 4))
         self.filtro_estado = IHCombobox(
             bar, label=None,
             values=["(todos)"] + [e.value for e in EstadoMovimiento],
@@ -913,15 +932,53 @@ class VentasView(ttk.Frame):
         page.grid(row=0, column=0, sticky="nsew")
         page.columnconfigure(0, weight=1)
 
-        IHSectionHeader(page, title="Ventas", subtitle="Facturas y remitos provenientes de ASA9.").pack(fill="x", pady=(0, 12))
+        self._tab_bar = ttk.Frame(page, style="IH.TFrame")
+        self._tab_bar.pack(fill="x", pady=(0, 8))
 
-        notebook = ttk.Notebook(page)
-        notebook.pack(fill="both", expand=True)
+        outer = tk.Frame(page, highlightthickness=2, highlightbackground="#22c55e", highlightcolor="#22c55e", bd=0, background="#000000")
+        outer.pack(fill="both", expand=True)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(0, weight=1)
 
-        self._facturas_tab = _VentasTabFrame(notebook, api_client, "facturas")
-        self._remitos_tab = _VentasTabFrame(notebook, api_client, "remitos")
-        notebook.add(self._facturas_tab, text="  Facturas  ")
-        notebook.add(self._remitos_tab, text="  Remitos  ")
+        content = tk.Frame(outer, background="#000000")
+        content.grid(row=0, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=1)
+        content.rowconfigure(0, weight=1)
+
+        self._facturas_tab = _VentasTabFrame(content, api_client, "facturas")
+        self._remitos_tab = _VentasTabFrame(content, api_client, "remitos")
+        self._facturas_tab.grid(row=0, column=0, sticky="nsew")
+        self._remitos_tab.grid(row=0, column=0, sticky="nsew")
+
+        self._active_tab = "facturas"
+        self._render_tab_buttons()
+        self._facturas_tab.lift()
+
+    def _render_tab_buttons(self) -> None:
+        for w in self._tab_bar.winfo_children():
+            w.destroy()
+        IHButton(
+            self._tab_bar, text="Facturas",
+            variant="primary" if self._active_tab == "facturas" else "secondary",
+            outline=self._active_tab != "facturas",
+            command=self._show_facturas,
+        ).pack(side="left", padx=(0, 4), pady=4)
+        IHButton(
+            self._tab_bar, text="Remitos",
+            variant="primary" if self._active_tab == "remitos" else "secondary",
+            outline=self._active_tab != "remitos",
+            command=self._show_remitos,
+        ).pack(side="left", pady=4)
+
+    def _show_facturas(self) -> None:
+        self._active_tab = "facturas"
+        self._facturas_tab.lift()
+        self._render_tab_buttons()
+
+    def _show_remitos(self) -> None:
+        self._active_tab = "remitos"
+        self._remitos_tab.lift()
+        self._render_tab_buttons()
 
     def should_prepare_for_render(self) -> bool:
         return True
@@ -936,7 +993,7 @@ class _VentasTabFrame(ttk.Frame):
     """Tab generico para Facturas o Remitos dentro de VentasView."""
 
     def __init__(self, master, api_client: ApiClient, tipo: str) -> None:
-        super().__init__(master, padding=(12, 8))
+        super().__init__(master, padding=0, style="IH.TFrame")
         self.api_client = api_client
         self.tipo = tipo
         self._filas: list[dict] = []
@@ -946,26 +1003,34 @@ class _VentasTabFrame(ttk.Frame):
         self._build_filtros()
 
         footer = ttk.Frame(self, style="IH.TFrame")
-        footer.pack(side="bottom", fill="x", pady=(8, 0))
+        footer.pack(side="bottom", fill="x", padx=12, pady=(8, 8))
         IHButton(footer, text="Refrescar", variant="secondary", outline=True, command=self._aplicar_filtros).pack(side="left")
         self.status_var = tk.StringVar(value="")
         ttk.Label(footer, textvariable=self.status_var, style="IH.TLabel").pack(side="left", padx=(12, 0))
 
+        tabla_border = tk.Frame(self, highlightthickness=2, highlightbackground="#22c55e", highlightcolor="#22c55e", bd=0, background="#000000")
+        tabla_border.pack(fill="both", expand=True, padx=12, pady=(0, 0))
         self.tabla = IHTable(
-            self,
+            tabla_border,
             columns=("Fecha", "Cliente", "Comprobante", "Total", "Estado", "Origen"),
             rows=[],
             row_tag_key="semaforo",
         )
         _apply_table_tags(self.tabla, tags=("green", "grey"))
         self.tabla.bind("<<IHThemeChanged>>", lambda _: _apply_table_tags(self.tabla, tags=("green", "grey")), add="+")
-        self.tabla.pack(fill="both", expand=True, pady=(8, 0))
+        self.tabla.pack(fill="both", expand=True)
+        self.tabla._border.configure(bg="#000000", highlightthickness=0)
+        _fix_treeview_border(self.tabla.tree)
+        self.tabla.bind("<<IHThemeChanged>>", lambda _: (
+            self.tabla._border.configure(bg="#000000", highlightthickness=0),
+            _fix_treeview_border(self.tabla.tree),
+        ), add="+")
 
     def _build_filtros(self) -> None:
-        bar = ttk.Frame(self)
-        bar.pack(fill="x", pady=(0, 4))
+        bar = ttk.Frame(self, style="IH.TFrame")
+        bar.pack(fill="x", padx=12, pady=(8, 4))
 
-        ttk.Label(bar, text="Desde:").pack(side="left", padx=(0, 4))
+        ttk.Label(bar, text="Desde:", style="IH.TLabel").pack(side="left", padx=(0, 4))
         self.filtro_desde = DateEntry(
             bar, dateformat="%Y-%m-%d", firstweekday=0,
             startdate=date.today(), bootstyle="primary", width=12,
@@ -973,7 +1038,7 @@ class _VentasTabFrame(ttk.Frame):
         self.filtro_desde.pack(side="left", padx=(0, 12))
         _fix_dateentry_theme(self.filtro_desde)
 
-        ttk.Label(bar, text="Hasta:").pack(side="left", padx=(0, 4))
+        ttk.Label(bar, text="Hasta:", style="IH.TLabel").pack(side="left", padx=(0, 4))
         self.filtro_hasta = DateEntry(
             bar, dateformat="%Y-%m-%d", firstweekday=0,
             startdate=date.today(), bootstyle="primary", width=12,
@@ -981,7 +1046,7 @@ class _VentasTabFrame(ttk.Frame):
         self.filtro_hasta.pack(side="left", padx=(0, 12))
         _fix_dateentry_theme(self.filtro_hasta)
 
-        ttk.Label(bar, text="Estado:").pack(side="left", padx=(0, 4))
+        ttk.Label(bar, text="Estado:", style="IH.TLabel").pack(side="left", padx=(0, 4))
         estados = _ESTADOS_FACTURA if self.tipo == "facturas" else _ESTADOS_REMITO
         self.filtro_estado = IHCombobox(bar, label=None, values=estados, state="readonly")
         self.filtro_estado.surface.configure(width=150)
